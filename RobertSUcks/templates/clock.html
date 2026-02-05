@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+<head>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <title>Clock In/Out</title>
+</head>
+<body class="home">
+    <nav>
+        <ul class="menu">
+            <li><a href="{{ url_for('home.home') }}">Home</a></li>
+            <li><a href="{{ url_for('maps.index') }}">Maps</a></li>
+            <li><a href="{{ url_for('food.index') }}">Add Food</a></li>
+
+            <li>
+                <form method="post" action="{{ url_for('auth.logout') }}" style="display:inline;">
+                    <button type="submit">Logout</button>
+                </form>
+            </li>
+        </ul>
+    </nav>
+
+    <section class="home" style="text-align:center;">
+        <h1>Clock In/Out</h1>
+
+        <p>Total Time Worked: {{ "%02d:%02d:%02d" | format(hours, minutes, seconds) }}</p>
+
+        {% if clocked_in %}
+            <p>You are currently clocked in.</p>
+            <form method="post" action="{{ url_for('clock.clock_out') }}">
+                <button type="submit">Clock Out</button>
+            </form>
+        {% else %}
+            <p>You are currently clocked out.</p>
+            <form method="post" action="{{ url_for('clock.clock_in') }}">
+                <button type="submit">Clock In</button>
+            </form>
+        {% endif %}
+    </section>
+</body>
+</html>

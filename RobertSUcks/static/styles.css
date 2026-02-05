@@ -1,0 +1,53 @@
+body {
+    margin: 0;
+    font-family: Georgia, 'Times New Roman', Times, serif;
+    background-color: #FFC72C;
+    color: #00053E;
+}
+
+nav {
+    background-color: #00053E;
+    padding: 1em;
+}
+
+.menu {
+    display: flex;
+    gap: 3em;
+    justify-content: center;
+    margin: 0 auto;
+    padding: 0;
+}
+
+.menu a {
+    color: #FFC72C;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.menu a:hover {
+    color: #FFC72C;
+}
+
+main {
+    padding: 1em;
+    text-align: center;
+}
+
+.disabled {
+    pointer-events: none;
+    cursor: default;
+}
+
+.hero-section {
+    width: 100%;
+    background-color: white;
+    padding: 0.5em 0;
+    text-align: center;
+}
+
+.hero-section .hero-image img {
+    max-width: 200px;
+    width: 50%;
+    height: auto;
+    
+}

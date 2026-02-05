@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Student Location Map</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body class="home">
+  <div class="hero-section">
+    <div class="hero-image">
+      <img src="{{ url_for('static', filename='nutrilog_icon.png') }}" alt="NutriLog Icon">
+    </div>
+  </div>
+
+  <nav>
+    <ul class="menu">
+      <li><a href="{{ url_for('home.home') }}">Home</a></li>
+      {% if role == 'student' %}
+        <li><a href="{{ url_for('clock.index') }}">Clock In/Out</a></li>
+        <li><a href="{{ url_for('assignments.student_assignments', student_id=user_id) }}">Assignments</a></li>
+      {% elif role == 'instructor' %}
+        <li><a href="{{ url_for('students.index') }}">Students</a></li>
+      {% endif %}
+      <li>
+        <form method="post" action="{{ url_for('auth.logout') }}" style="display:inline;">
+          <button type="submit">Logout</button>
+        </form>
+      </li>
+    </ul>
+  </nav>
+
+  <main>
+    <section class="home">
+      <h1>Student Location Map (Instructor View)</h1>
+      <p>You are logged in as <b>{{ role }}</b>: {{ user_id }}</p>
+
+      <p id="status">Loading student locations...</p>
+      <div id="map" style="width: 100%; height: 550px; margin-top: 1em;"></div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/instructor_map.js') }}"></script>
+  <script
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDzyLnkHUilkBzw-hk26fbQcbjBsPTqTv4&v=weekly&callback=initMap"
+    async defer>
+  </script>
+</body>
+</html>
