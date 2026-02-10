@@ -34,26 +34,19 @@ def login():
             conn = mysql.connector.connect(**DB_CONFIG)
             cur = conn.cursor(dictionary=True)
 
-            # Check Students first
+            # Check User
             cur.execute(
-                "SELECT * FROM Students WHERE student_id = %s AND pass_key = %s",
+                "SELECT * FROM Users WHERE user_id = %s AND pass_key = %s",
                 (entered_id, entered_pass),
             )
-            student = cur.fetchone()
+            user = cur.fetchone()
 
-            instructor = None
-            if not student:
-                cur.execute(
-                    "SELECT * FROM Instructors WHERE instructor_id = %s AND pass_key = %s",
-                    (entered_id, entered_pass),
-                )
-                instructor = cur.fetchone()
 
             conn.close()
 
-            if student or instructor:
+            if user:
                 session["user_id"] = entered_id
-                session["role"] = "student" if student else "instructor"
+                session["role"] = "user"
                 return redirect(url_for("home.home"))
             else:
                 error = "Invalid ID or Pass Key. Please try again."
