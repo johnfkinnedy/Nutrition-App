@@ -106,25 +106,17 @@ def register():
         pass_key = request.form.get("pass_key", "").strip()
         first_name = request.form.get("first_name", "").strip()
         last_name = request.form.get("last_name", "").strip()
-        role = request.form.get("role", "")
 
-        if not all([user_id, pass_key, first_name, last_name, role]):
+        if not all([user_id, pass_key, first_name, last_name]):
             message = "All fields are required."
         else:
             try:
                 conn = mysql.connector.connect(**DB_CONFIG)
                 cur = conn.cursor()
-
-                if role == "student":
-                    cur.execute(
-                        "INSERT INTO Students (student_id, pass_key, first_name, last_name) VALUES (%s, %s, %s, %s)",
-                        (user_id, pass_key, first_name, last_name),
-                    )
-                else:
-                    cur.execute(
-                        "INSERT INTO Instructors (instructor_id, pass_key, first_name, last_name) VALUES (%s, %s, %s, %s)",
-                        (user_id, pass_key, first_name, last_name),
-                    )
+                cur.execute(
+                    "INSERT INTO Users (user_id, pass_key, first_name, last_name) VALUES (%s, %s, %s, %s)",
+                    (user_id, pass_key, first_name, last_name),
+                )
                 conn.commit()
                 conn.close()
                 return redirect(url_for("auth.login"))
