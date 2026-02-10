@@ -5,7 +5,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 
 DROP TABLE IF EXISTS Meal_Log;
 DROP TABLE IF EXISTS Users;
-DROP TABLE IF EXISTS Workouts;
+DROP TABLE IF EXISTS workouts;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
@@ -22,7 +22,7 @@ CREATE TABLE Meal_Log (
     calories_gained           INT,
     clock_time_meal           DATETIME NULL,          -- Stores date + 24-hour time
     CONSTRAINT fk_meal_user
-        FOREIGN KEY (user_id)
+        FOREIGN KEY Users(user_id)
         REFERENCES Users(user_id)
         ON DELETE CASCADE
 );
@@ -33,7 +33,7 @@ CREATE TABLE Workouts (
     workout_name VARCHAR(50) NOT NULL,
     calories_burned           INT,
     CONSTRAINT fk_assign_student
-        FOREIGN KEY (user_id)
+        FOREIGN KEY Users(user_id)
         REFERENCES Users(user_id)
         ON DELETE CASCADE
 );
@@ -41,9 +41,8 @@ CREATE TABLE Workouts (
 INSERT INTO Users (user_id, pass_key, first_name, last_name)
 VALUES (2222, '2222', 'Grace', 'Jonas');
 
-INSERT INTO Meal_Log (log_id, user_id, calories_gained, clock_time_meal)
-VALUES (0001, 2222, NULL, NULL);
+INSERT INTO Meal_Log (user_id, calories_gained, clock_time_meal)
+VALUES (2222, NULL, NULL);
 
 INSERT INTO Workouts (user_id, workout_id, workout_name, calories_burned)
-VALUES (2222, 1000, 'Chest Press', 92);
- 
+VALUES (2222, 2222, 'Arm Lift', 92);
