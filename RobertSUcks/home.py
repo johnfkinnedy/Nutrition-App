@@ -1,57 +1,22 @@
-from flask import Blueprint, session, redirect, url_for, render_template_string, request
+from flask import Blueprint, session, redirect, url_for, render_template_string
 
 home_bp = Blueprint("home", __name__, url_prefix="/home")
 
-auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
-
-@auth_bp.route("/logout", methods=["POST"])
-def logout():
-    session.clear()  # clears all session data
-    return redirect(url_for("auth.login"))
-
 @home_bp.route("/")
 def home():
-    # Require login
     if not session.get("user_id"):
         return redirect(url_for("auth.login"))
 
     user_id = session.get("user_id")
-    first_name = session.get("first_name", "User")  # optional: store first_name in session
+    first_name = session.get("first_name", "User")
     last_name = session.get("last_name", "")
-    
-    # URLs for navigation
+
     logout_url = url_for("auth.logout")
     maps_url = url_for("maps.index")
     food_url = url_for("food.index")
     clock_url = url_for("clock.index")
 
-<<<<<<< HEAD
     return render_template_string("""
-=======
-    # Base nav: Maps is visible to everyone
-    nav_buttons = f"""
-        <li><a href="{maps_url}">Maps</a></li>
-        <li><a href="{food_url}">Add Food</a></li>
-        <li><a href="{clock_url}">Clock In/Out</a></li>
-    """
-
-    if role == "user":
-        # User-specific buttons
-        nothing = 0
-    else:
-        # Trainer-specific "Students" button
-        nothing = 1
-
-    nav_buttons += f"""
-        <li>
-            <form method="post" action="{logout_url}" style="display:inline;">
-                <button type="submit">Logout</button>
-            </form>
-        </li>
-    """
-
-    return f"""
->>>>>>> 5694bf93d16bbd88edb40ad9a018f118744170a5
     <!DOCTYPE html>
     <html lang="en">
     <head>
@@ -60,7 +25,6 @@ def home():
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
     </head>
     <body>
-
         <nav class="navbar">
             <div class="logo">
                 <img src="{{ url_for('static', filename='nutrilog_icon.png') }}" alt="NutriLog">
@@ -96,5 +60,12 @@ def home():
 
     </body>
     </html>
-    """, user_id=user_id, first_name=first_name, last_name=last_name,
-         logout_url=logout_url, maps_url=maps_url, food_url=food_url, clock_url=clock_url)
+    """,
+    user_id=user_id,
+    first_name=first_name,
+    last_name=last_name,
+    logout_url=logout_url,
+    maps_url=maps_url,
+    food_url=food_url,
+    clock_url=clock_url
+    )
