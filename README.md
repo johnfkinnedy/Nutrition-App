@@ -1,7 +1,7 @@
 # Nutrition-App
 
 **When setting up MySQL:
-- Install and configure from https://www.oracle.com/mysql/technologies/mysql-enterprise-edition-downloads.html 
+- Install and configure from https://www.oracle.com/mysql/technologies/mysql-enterprise-edition-downloads.html  (GO TO THE WINDOWS TAB)
   - really only need mysql-commercial folder
     - inside the mysql-commercial BIN folder, run mysql_configurator.exe
   - Configure root account with 'Barker123!' as password, for this project (or change in files)
