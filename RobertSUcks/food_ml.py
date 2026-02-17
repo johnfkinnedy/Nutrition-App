@@ -4,13 +4,32 @@ from PIL import Image
 import json
 import uuid
 from pathlib import Path
+import mysql.connector
+from mysql.connector import Error
+from datetime import datetime
 
 import torch
 import torch.nn as nn
 from torchvision import models, transforms
 
 
+# =========================
+# DB CONFIG (MATCH auth.py)
+# =========================
+DB_CONFIG = {
+    "host": "localhost",
+    "port": 3306,
+    "user": "root",
+    "password": "Barker123!",
+    "database": "NutriLog",
+}
+
+def _db_conn():
+    return mysql.connector.connect(**DB_CONFIG)
+
+
 food_bp = Blueprint("food", __name__, url_prefix="/food")
+
 
 # --------- Model files ----------
 BASE_DIR = Path(__file__).resolve().parent
@@ -37,6 +56,7 @@ num_classes = len(idx_to_class)
 print(f"[FOOD_ML] Loaded {num_classes} classes from idx_to_class.json")
 print(f"[FOOD_ML] Sample classes: {class_names[:5]}")
 
+
 # --------- Build model (must match training) ----------
 def build_model(num_classes: int) -> torch.nn.Module:
     model = models.resnet50(weights=None)
@@ -47,32 +67,29 @@ def build_model(num_classes: int) -> torch.nn.Module:
 
 model = None
 
+
 def _load_model():
     global model
     if model is not None:
         return model
 
-    try:
-        print(f"[FOOD_ML] Loading model from {WEIGHTS_PATH}...")
-        print(f"[FOOD_ML] Model will have {num_classes} output classes")
-        model = build_model(num_classes).to(DEVICE)
-        state = torch.load(WEIGHTS_PATH, map_location=DEVICE)
-        model.load_state_dict(state)
-        model.eval()
-        print(f"[FOOD_ML] Model loaded successfully with {num_classes} classes")
-        return model
-    except Exception as e:
-        print(f"[FOOD_ML] ERROR loading model: {e}")
-        import traceback
-        traceback.print_exc()
-        raise
+    print(f"[FOOD_ML] Loading model from {WEIGHTS_PATH}...")
+    model = build_model(num_classes).to(DEVICE)
+    state = torch.load(WEIGHTS_PATH, map_location=DEVICE)
+    model.load_state_dict(state)
+    model.eval()
+    print("[FOOD_ML] Model loaded successfully")
+    return model
+
 
 # --------- Preprocess (must match your test_tfms) ----------
 preprocess = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                         std=[0.229, 0.224, 0.225]),
+    transforms.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225],
+    ),
 ])
 
 
@@ -117,10 +134,6 @@ def _save_upload_to_static(file_storage) -> str:
 
 
 def _build_nav_buttons() -> str:
-    """
-    Same idea as home.py:
-    build nav HTML in Python based on session data.
-    """
     logout_url = url_for("auth.logout")
     maps_url = url_for("maps.index")
     home_url = url_for("home.home")
@@ -130,7 +143,7 @@ def _build_nav_buttons() -> str:
         <li><a href="{home_url}">Home</a></li>
         <li><a href="{maps_url}">Maps</a></li>
         <li><a href="{clock_url}">Clock In/Out</a></li>
-        
+
         <li>
             <form method="post" action="{logout_url}" style="display:inline;">
                 <button type="submit">Logout</button>
@@ -138,6 +151,120 @@ def _build_nav_buttons() -> str:
         </li>
     """
     return nav_buttons
+
+
+def _parse_items_json(val):
+    if val is None:
+        return []
+    if isinstance(val, (bytes, bytearray)):
+        try:
+            val = val.decode("utf-8", errors="ignore")
+        except Exception:
+            return []
+    if isinstance(val, str):
+        try:
+            out = json.loads(val)
+            return out if isinstance(out, list) else []
+        except Exception:
+            return []
+    if isinstance(val, list):
+        return val
+    return []
+
+
+def _fetch_saved_meals_for_user(user_id: int, limit: int = 25):
+    """
+    Reads saved meals from Meal_Log for this user.
+    Uses key name 'meal_items' (NOT 'items') to avoid Jinja dict method collision.
+    """
+    conn = None
+    cur = None
+    saved = []
+    try:
+        conn = _db_conn()
+        cur = conn.cursor(dictionary=True)
+
+        cur.execute(
+            """
+            SELECT log_id, clock_time_meal, calories_gained, meal_items_json
+            FROM Meal_Log
+            WHERE user_id = %s
+            ORDER BY COALESCE(clock_time_meal, NOW()) DESC, log_id DESC
+            LIMIT %s
+            """,
+            (user_id, limit),
+        )
+        rows = cur.fetchall() or []
+
+        for r in rows:
+            dt = r.get("clock_time_meal")
+            created_at = dt.strftime("%Y-%m-%d %H:%M:%S") if hasattr(dt, "strftime") else (str(dt) if dt else "")
+            saved.append({
+                "log_id": r.get("log_id"),
+                "created_at": created_at,
+                "calories_gained": r.get("calories_gained"),
+                "meal_items": _parse_items_json(r.get("meal_items_json")),
+            })
+
+    except Exception as e:
+        print(f"[FOOD_ML] ERROR loading saved meals: {e}")
+        session["flash_msg"] = f"DB error loading saved meals: {e}"
+    finally:
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+    return saved
+
+
+@food_bp.route("/db_debug", methods=["GET"])
+def db_debug():
+    if not _require_login():
+        return redirect(url_for("auth.login"))
+
+    info = {
+        "db_config_database": DB_CONFIG.get("database"),
+        "session_user_id": session.get("user_id"),
+        "connected_database()": None,
+        "meal_log_columns": [],
+    }
+
+    conn = None
+    cur = None
+    try:
+        conn = _db_conn()
+        cur = conn.cursor()
+
+        cur.execute("SELECT DATABASE()")
+        row = cur.fetchone()
+        info["connected_database()"] = row[0] if row else None
+
+        cur.execute("SHOW COLUMNS FROM Meal_Log")
+        cols = cur.fetchall() or []
+        info["meal_log_columns"] = [c[0] for c in cols]
+
+    except Exception as e:
+        info["error"] = str(e)
+    finally:
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+    return jsonify(info)
 
 
 @food_bp.route("/", methods=["GET"])
@@ -153,8 +280,14 @@ def index():
     current_image_url = session.get("current_image_url", None)
     current_preds = session.get("current_preds", None)
     history = _session_get_pred_history()
-
     nav_buttons = _build_nav_buttons()
+
+    saved_meals = []
+    try:
+        user_id = int(session.get("user_id"))
+        saved_meals = _fetch_saved_meals_for_user(user_id, limit=25)
+    except Exception:
+        saved_meals = []
 
     return render_template_string(
         PAGE_HTML,
@@ -165,6 +298,7 @@ def index():
         current_image_url=current_image_url,
         current_preds=current_preds,
         history=history,
+        saved_meals=saved_meals,
     )
 
 
@@ -183,7 +317,8 @@ def predict():
 
     try:
         image_url = _save_upload_to_static(file)
-    except Exception:
+    except Exception as e:
+        print(f"[FOOD_ML] ERROR saving upload: {e}")
         if request.headers.get("X-Requested-With") == "fetch":
             return jsonify({"ok": False, "error": "save_failed"}), 400
         return redirect(url_for("food.index"))
@@ -192,7 +327,8 @@ def predict():
         rel = image_url.split("/static/", 1)[-1]
         img_path = STATIC_DIR / rel
         pil_img = Image.open(img_path)
-    except Exception:
+    except Exception as e:
+        print(f"[FOOD_ML] ERROR reading image: {e}")
         if request.headers.get("X-Requested-With") == "fetch":
             return jsonify({"ok": False, "error": "bad_image"}), 400
         return redirect(url_for("food.index"))
@@ -315,6 +451,71 @@ def clear_history():
     return redirect(url_for("food.index"))
 
 
+@food_bp.route("/save_meal", methods=["POST"])
+def save_meal():
+    """
+    Saves current session meal list into Meal_Log.meal_items_json,
+    with a timestamp in clock_time_meal.
+    """
+    if not _require_login():
+        return redirect(url_for("auth.login"))
+
+    try:
+        user_id = int(session.get("user_id"))
+    except Exception:
+        session["flash_msg"] = f"Save failed: session.user_id is not an integer ({session.get('user_id')})"
+        return redirect(url_for("food.index"))
+
+    meal = session.get("meal_items", [])
+    if not isinstance(meal, list):
+        meal = []
+
+    if len(meal) == 0:
+        session["flash_msg"] = "Meal is empty — add items first."
+        return redirect(url_for("food.index"))
+
+    meal_items_json = json.dumps(meal)
+    now_dt = datetime.now()
+
+    conn = None
+    cur = None
+    try:
+        conn = _db_conn()
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            INSERT INTO Meal_Log (user_id, calories_gained, clock_time_meal, meal_items_json)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (user_id, None, now_dt, meal_items_json),
+        )
+        conn.commit()
+
+        session["flash_msg"] = f"Meal saved! (log_id={cur.lastrowid})"
+        return redirect(url_for("food.index"))
+
+    except Error as e:
+        session["flash_msg"] = f"MySQL error saving meal: {e}"
+        return redirect(url_for("food.index"))
+
+    except Exception as e:
+        session["flash_msg"] = f"Unknown error saving meal: {e}"
+        return redirect(url_for("food.index"))
+
+    finally:
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+
 PAGE_HTML = r"""
 <!doctype html>
 <html>
@@ -375,19 +576,24 @@ PAGE_HTML = r"""
 
 <body class="home">
 
-  <!-- Header like home.py -->
   <div class="hero-section">
       <div class="hero-image">
           <img src="{{ url_for('static', filename='nutrilog_icon.png') }}" alt="NutriLog Icon">
       </div>
   </div>
 
-  <!-- ✅ Nav menu injected from Python (like home.py) -->
   <nav>
       <ul class="menu">
           {{ nav_buttons|safe }}
       </ul>
   </nav>
+
+  {% if session.get("flash_msg") %}
+    <div class="card">
+      <p class="muted">{{ session.get("flash_msg") }}</p>
+    </div>
+    {% set _ = session.pop("flash_msg") %}
+  {% endif %}
 
   <div class="card">
     <h2>Add Food (Upload → Auto Predict → Pick → Add to Meal)</h2>
@@ -495,12 +701,21 @@ PAGE_HTML = r"""
           <form action="{{ url_for('food.clear_meal') }}" method="post" style="margin-top:12px;">
             <button type="submit">Clear Meal</button>
           </form>
+
+          <form action="{{ url_for('food.save_meal') }}" method="post" style="margin-top:12px;">
+            <button type="submit">Save Meal</button>
+          </form>
+
         {% else %}
           <p>No items added yet. Add foods and they’ll appear here.</p>
         {% endif %}
 
         <p style="margin-top:14px; color:#666;">
-          (Right now this “meal” list is stored in your session. Next step is saving it to MySQL with a timestamp so you can view past meals.)
+          (Your meal list is in session until you click “Save Meal”. Saved meals go into Meal_Log.meal_items_json.)
+        </p>
+
+        <p class="muted" style="margin-top:10px;">
+          Debug: <a href="{{ url_for('food.db_debug') }}">/food/db_debug</a>
         </p>
       </div>
     </div>
@@ -531,6 +746,33 @@ PAGE_HTML = r"""
       </div>
     {% else %}
       <p class="muted">No history yet. Add a predicted item to your meal to start building history.</p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h3>Saved Meals (from database)</h3>
+
+    {% if saved_meals and saved_meals|length > 0 %}
+      <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+        {% for m in saved_meals %}
+          <div style="border:1px solid #eee; border-radius:12px; padding:12px; background:#fafafa;">
+            <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+              <div><b>{{ m.created_at }}</b></div>
+              <div class="muted">Meal #{{ m.log_id }}</div>
+            </div>
+
+            {% if m.meal_items and m.meal_items|length > 0 %}
+              <div style="margin-top:8px;">
+                {{ m.meal_items|join(", ") }}
+              </div>
+            {% else %}
+              <div class="muted" style="margin-top:8px;">(No items)</div>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">No saved meals yet. Add foods and click “Save Meal”.</p>
     {% endif %}
   </div>
 
