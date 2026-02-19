@@ -7,6 +7,8 @@ from flask import (
     session,
 )
 import mysql.connector
+from security import encrypt_password, decrypt_password
+import passlib
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -25,7 +27,9 @@ def register():
     message = None
 
     if request.method == "POST":
+        user_id = request.form.get("user_id", "").strip()
         pass_key = request.form.get("pass_key", "").strip()
+        encrypted_passkey = encrypt_password(pass_key)
         first_name = request.form.get("first_name", "").strip()
         last_name = request.form.get("last_name", "").strip()
 
@@ -38,8 +42,8 @@ def register():
 
                 # Insert new user
                 cur.execute(
-                    "INSERT INTO Users (pass_key, first_name, last_name) VALUES (%s, %s, %s)",
-                    (pass_key, first_name, last_name),
+                    "INSERT INTO Users (user_id, pass_key, first_name, last_name) VALUES (%s, %s, %s, %s)",
+                    (user_id, encrypted_passkey, first_name, last_name),
                 )
 
                 conn.commit()
@@ -76,6 +80,7 @@ def register():
         {% endif %}
 
         <form method="post" class="auth-form">
+            <input name="user_id" placeholder="User ID" required>
             <input name="first_name" placeholder="First Name" required>
             <input name="last_name" placeholder="Last Name" required>
             <input name="pass_key" type="password" placeholder="Password" required>
@@ -106,17 +111,32 @@ def login():
     if request.method == "POST":
         entered_id = request.form.get("user_id", "").strip()
         entered_pass = request.form.get("pass_key", "").strip()
-
+        
         try:
             conn = mysql.connector.connect(**DB_CONFIG)
-            cur = conn.cursor(dictionary=True)
-
-            # Check Users table
-            cur.execute(
-                "SELECT * FROM Users WHERE user_id = %s AND pass_key = %s",
-                (entered_id, entered_pass),
-            )
-            user = cur.fetchone()
+            cur_pw = conn.cursor() 
+            
+            cur_pw.execute("SELECT pass_key FROM Users WHERE user_id = %s", (entered_id,))
+            
+            db_password = cur_pw.fetchone()
+            db_password = db_password[0]
+            db_password = db_password.encode('utf-8')
+            print(entered_pass)
+            
+            cur_pw.close()
+            
+            if decrypt_password(entered_pass, db_password):
+                
+                cur = conn.cursor(dictionary=True, buffered=True)
+                
+                cur.execute("SELECT pass_key FROM Users WHERE user_id = %s", (entered_id,))
+                
+                # Check Users table
+                cur.execute(
+                    "SELECT * FROM Users WHERE user_id = %s",
+                    (entered_id,)
+                )
+                user = cur.fetchone()
             conn.close()
 
             if user:
@@ -130,7 +150,11 @@ def login():
 
         except mysql.connector.Error as e:
             error = f"Database error: {e}"
-        
+        #catching error for incorrect hashes, which is just incorrect password
+        except passlib.exc.UnknownHashError as e:
+            error = f"Password Error: Please try again!"
+        except Exception as e:
+            error = f"An unknown error occurred: {e}"
 
     return render_template_string("""
 <!DOCTYPE html>
