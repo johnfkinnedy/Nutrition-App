@@ -93,6 +93,9 @@ def register():
 </html>
 """, message=message)
 
+# ----------------------
+# LOGIN ROUTE
+# ----------------------
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     error = None

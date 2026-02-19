@@ -920,8 +920,8 @@ PAGE_HTML = r"""
         </li>
 
         <li>
-            <form action="{{ logout_url }}" method="post">
-                <button type="submit" class="nav-btn">Logout</button>
+            <form action="{{ url_for('auth.logout') }}" method="post">
+            <button type="submit" class="nav-btn">Logout</button>
             </form>
         </li>
     </ul>
