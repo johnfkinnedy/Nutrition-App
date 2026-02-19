@@ -26,22 +26,37 @@ def home():
     </head>
     <body>
         <nav class="navbar">
-            <div class="logo">
-                <img src="{{ url_for('static', filename='nutrilog_icon.png') }}" alt="NutriLog">
-                <span>NutriLog</span>
-            </div>
-            <ul class="menu">
-                <li><a href="{{ maps_url }}">Maps</a></li>
-                <li><a href="{{ food_url }}">Add Food</a></li>
-                <li><a href="{{ clock_url }}">Clock In/Out</a></li>
-                <li>
-                    <form method="post" action="{{ logout_url }}" style="display:inline;">
-                        <button class="logout-btn" type="submit">Logout</button>
-                    </form>
-                </li>
-            </ul>
-        </nav>
+    <div class="logo">
+        <img src="{{ url_for('static', filename='nutrilog_icon.png') }}" alt="NutriLog">
+        <span>NutriLog</span>
+    </div>
 
+    <ul class="menu">
+        <li>
+            <form action="{{ maps_url }}" method="get">
+                <button type="submit" class="nav-btn">Maps</button>
+            </form>
+        </li>
+
+        <li>
+            <form action="{{ food_url }}" method="get">
+                <button type="submit" class="nav-btn">Add Food</button>
+            </form>
+        </li>
+
+        <li>
+            <form action="{{ clock_url }}" method="get">
+                <button type="submit" class="nav-btn">Clock In/Out</button>
+            </form>
+        </li>
+
+        <li>
+            <form action="{{ logout_url }}" method="post">
+                <button type="submit" class="nav-btn">Logout</button>
+            </form>
+        </li>
+    </ul>
+</nav>
         <header class="hero">
             <h1>Welcome back, {{ first_name }}!</h1>
             <p>Your personalized nutrition dashboard</p>
