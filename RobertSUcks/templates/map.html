@@ -1,49 +1,79 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>My Location Map</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NutriLog • Map</title>
+
+  <!-- Keep your global styles -->
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+
+  <!-- Map-only styles (NEW) -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='map.css') }}">
 </head>
-<body class="home">
-  <div class="hero-section">
-    <div class="hero-image">
-      <img src="{{ url_for('static', filename='nutrilog_icon.png') }}" alt="NutriLog Icon">
+
+<body>
+  <!-- Simple header (doesn't change your teammate's pages) -->
+  <header class="map-topbar">
+    <div class="map-brand">
+      <span class="map-brandname">NutriLog</span>
+      <span class="map-tag">Student Map</span>
     </div>
-  </div>
 
-  <nav>
-    <ul class="menu">
-      <li><a href="{{ url_for('home.home') }}">Home</a></li>
-      
-      <li><a href="{{ url_for('food.index') }}">Add Food</a></li>
-      <li><a href="{{ url_for('clock.index') }}">Clock In/Out</a></li>
+    <div class="map-meta">
+      <div class="map-pill">
+        <div class="map-pill-label">Role</div>
+        <div class="map-pill-value">{{ role }}</div>
+      </div>
+      <div class="map-pill">
+        <div class="map-pill-label">User ID</div>
+        <div class="map-pill-value">{{ user_id }}</div>
+      </div>
+      <div class="map-pill">
+        <div class="map-pill-label">Initials</div>
+        <div class="map-pill-value">{{ initials }}</div>
+      </div>
+    </div>
+  </header>
 
-      <li>
-        <form method="post" action="{{ url_for('auth.logout') }}" style="display:inline;">
-          <button type="submit">Logout</button>
-        </form>
-      </li>
-    </ul>
-  </nav>
+  <main class="map-page">
+    <section class="map-hero">
+      <div>
+        <h1 class="map-title">My Location</h1>
+        <p class="map-subtitle">
+          This page updates your latest location into the Activity Log.
+        </p>
+      </div>
 
-  <main>
-    <section class="home">
-      <h1>My Location Map</h1>
-      <p>You are logged in as <b>{{ role }}</b>: {{ user_id }}</p>
+      <button class="map-btn" type="button" onclick="window.location.reload()">
+        Refresh
+      </button>
+    </section>
 
-      <p id="status">Requesting your location...</p>
-      <div id="map" style="width: 100%; height: 500px; margin-top: 1em;"></div>
+    <section class="map-card">
+      <div class="map-cardhead">
+        <div class="map-status">
+          <span class="map-dot" aria-hidden="true"></span>
+          <p id="status" class="map-statustext">Requesting your location...</p>
+        </div>
+      </div>
+
+      <!-- KEEP this ID for Google Maps -->
+      <div id="map" class="map-canvas"></div>
     </section>
   </main>
 
   <script>
     const USER_INITIALS = "{{ initials }}";
   </script>
+
+  <!-- Keep your existing student map JS file name if different -->
   <script src="{{ url_for('static', filename='js/student_map.js') }}"></script>
-  <script
-    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDzyLnkHUilkBzw-hk26fbQcbjBsPTqTv4&v=weekly&callback=initMap"
-    async defer>
-  </script>
+
+  <!-- Keep your existing Google Maps script tag (use your real key) -->
+<script
+  src="https://maps.googleapis.com/maps/api/js?key=YOUR_REAL_KEY&v=weekly"
+  async defer>
+</script>
 </body>
 </html>
