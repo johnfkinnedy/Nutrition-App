@@ -33,6 +33,7 @@ def createDatabaseFromFile():
 
   # Close the cursor and the database connection
   cursor.close()
+  
   conn.close()
 
 createDatabaseFromFile()
