@@ -14,7 +14,6 @@ import torch
 import torch.nn as nn
 from torchvision import models, transforms
 
-
 # =========================
 # DB CONFIG (MATCH auth.py)
 # =========================
@@ -29,9 +28,7 @@ DB_CONFIG = {
 def _db_conn():
     return mysql.connector.connect(**DB_CONFIG)
 
-
 food_bp = Blueprint("food", __name__, url_prefix="/food")
-
 
 # --------- Model files ----------
 BASE_DIR = Path(__file__).resolve().parent
@@ -48,7 +45,6 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
 
-
 # --------- Nutrition CSV ----------
 # Expected: 3rd column (index 2) is base grams (weight in grams)
 # We will scale the rest of the fields to the user's entered grams.
@@ -57,14 +53,12 @@ NUTRITION_CSV_PATH = BASE_DIR / "../fixed_nutrition.csv"
 # Fields we want to compute & display
 NUTRI_FIELDS = ["calories", "protein", "carbohydrates", "fats", "fiber", "sugars", "sodium"]
 
-
 def _norm_label(s: str) -> str:
     """Normalize labels to improve matching between model labels and CSV rows."""
     s = (s or "").strip().lower()
     s = re.sub(r"[_\-]+", " ", s)
     s = re.sub(r"\s+", " ", s)
     return s
-
 
 def _to_float(x, default=None):
     try:
@@ -81,10 +75,8 @@ def _to_float(x, default=None):
     except Exception:
         return default
 
-
 # nutrition_cache maps normalized food label -> dict with base_grams and nutrients per that base_grams
 _nutrition_cache = None
-
 
 def _load_nutrition_cache():
     """
@@ -204,7 +196,6 @@ def _load_nutrition_cache():
     _nutrition_cache = cache
     return cache
 
-
 def _compute_scaled_nutrition(label: str, grams: int | None):
     """
     Returns dict containing:
@@ -254,7 +245,6 @@ def _compute_scaled_nutrition(label: str, grams: int | None):
 
     return out
 
-
 def _fmt_num(x, digits=1):
     if x is None:
         return ""
@@ -263,7 +253,6 @@ def _fmt_num(x, digits=1):
         return f"{float(x):.{digits}f}"
     except Exception:
         return ""
-
 
 # --------- Load class mapping ----------
 with open(IDX_TO_CLASS_PATH, "r") as f:
@@ -275,7 +264,6 @@ num_classes = len(idx_to_class)
 print(f"[FOOD_ML] Loaded {num_classes} classes from idx_to_class.json")
 print(f"[FOOD_ML] Sample classes: {class_names[:5]}")
 
-
 # --------- Build model (must match training) ----------
 def build_model(num_classes: int) -> torch.nn.Module:
     model = models.resnet50(weights=None)
@@ -283,9 +271,7 @@ def build_model(num_classes: int) -> torch.nn.Module:
     model.fc = nn.Linear(in_features, num_classes)
     return model
 
-
 model = None
-
 
 def _load_model():
     global model
@@ -300,7 +286,6 @@ def _load_model():
     print("[FOOD_ML] Model loaded successfully")
     return model
 
-
 # --------- Preprocess (must match your test_tfms) ----------
 preprocess = transforms.Compose([
     transforms.Resize((224, 224)),
@@ -310,7 +295,6 @@ preprocess = transforms.Compose([
         std=[0.229, 0.224, 0.225],
     ),
 ])
-
 
 @torch.no_grad()
 def predict_topk(pil_img: Image.Image, k: int = 3):
@@ -327,17 +311,14 @@ def predict_topk(pil_img: Image.Image, k: int = 3):
         results.append((label, float(p)))
     return results
 
-
 def _require_login():
     return session.get("user_id") is not None
-
 
 def _session_get_pred_history():
     hist = session.get("predicted_history", [])
     if not isinstance(hist, list):
         hist = []
     return hist
-
 
 def _save_upload_to_static(file_storage) -> str:
     orig_name = secure_filename(file_storage.filename or "upload.jpg")
@@ -350,7 +331,6 @@ def _save_upload_to_static(file_storage) -> str:
     file_storage.save(out_path)
 
     return url_for("static", filename=f"food_uploads/{out_name}")
-
 
 def _build_nav_buttons() -> str:
     logout_url = url_for("auth.logout")
@@ -370,7 +350,6 @@ def _build_nav_buttons() -> str:
         </li>
     """
     return nav_buttons
-
 
 def _parse_items_json(val):
     """
@@ -394,7 +373,6 @@ def _parse_items_json(val):
     if isinstance(val, list):
         return val
     return []
-
 
 def _normalize_meal_list(meal):
     """
@@ -432,7 +410,6 @@ def _normalize_meal_list(meal):
 
     return normalized
 
-
 def _parse_grams_from_request(default_grams=100):
     raw = (request.form.get("grams", "") or "").strip()
     if raw == "":
@@ -446,7 +423,6 @@ def _parse_grams_from_request(default_grams=100):
     if g > 5000:
         return 5000
     return g
-
 
 def _apply_nutrition_to_item(item: dict):
     """
@@ -466,7 +442,6 @@ def _apply_nutrition_to_item(item: dict):
     for f in NUTRI_FIELDS:
         item[f] = scaled.get(f, None)
     return item
-
 
 def _fetch_saved_meals_for_user(user_id: int, limit: int = 25):
     """
@@ -529,7 +504,6 @@ def _fetch_saved_meals_for_user(user_id: int, limit: int = 25):
 
     return saved
 
-
 @food_bp.route("/db_debug", methods=["GET"])
 def db_debug():
     if not _require_login():
@@ -575,7 +549,6 @@ def db_debug():
 
     return jsonify(info)
 
-
 @food_bp.route("/", methods=["GET"])
 def index():
     if not _require_login():
@@ -614,7 +587,6 @@ def index():
         saved_meals=saved_meals,
         fmt_num=_fmt_num,
     )
-
 
 @food_bp.route("/predict", methods=["POST"])
 def predict():
@@ -659,7 +631,6 @@ def predict():
 
     return redirect(url_for("food.index"))
 
-
 @food_bp.route("/set_search", methods=["POST"])
 def set_search():
     if not _require_login():
@@ -668,7 +639,6 @@ def set_search():
     q = (request.form.get("search", "") or "").strip().lower()
     session["last_search_query"] = q
     return redirect(url_for("food.index"))
-
 
 @food_bp.route("/add", methods=["POST"])
 def add_food():
@@ -712,7 +682,6 @@ def add_food():
     session["last_search_query"] = ""
     return redirect(url_for("food.index"))
 
-
 @food_bp.route("/remove_meal_item", methods=["POST"])
 def remove_meal_item():
     if not _require_login():
@@ -730,7 +699,6 @@ def remove_meal_item():
         session["meal_items"] = meal
 
     return redirect(url_for("food.index"))
-
 
 @food_bp.route("/edit_meal_item", methods=["POST"])
 def edit_meal_item():
@@ -762,7 +730,6 @@ def edit_meal_item():
 
     return redirect(url_for("food.index"))
 
-
 @food_bp.route("/clear_meal", methods=["POST"])
 def clear_meal():
     if not _require_login():
@@ -770,14 +737,12 @@ def clear_meal():
     session["meal_items"] = []
     return redirect(url_for("food.index"))
 
-
 @food_bp.route("/clear_history", methods=["POST"])
 def clear_history():
     if not _require_login():
         return redirect(url_for("auth.login"))
     session["predicted_history"] = []
     return redirect(url_for("food.index"))
-
 
 @food_bp.route("/save_meal", methods=["POST"])
 def save_meal():
@@ -849,7 +814,6 @@ def save_meal():
                 conn.close()
         except Exception:
             pass
-
 
 PAGE_HTML = r"""
 <!doctype html>
@@ -930,11 +894,38 @@ PAGE_HTML = r"""
       </div>
   </div>
 
-  <nav>
-      <ul class="menu">
-          {{ nav_buttons|safe }}
-      </ul>
-  </nav>
+  <nav class="navbar">
+    <div class="logo">
+        <img src="{{ url_for('static', filename='nutrilog_icon.png') }}" alt="NutriLog">
+        <span>NutriLog</span>
+    </div>
+
+    <ul class="menu">
+        <li>
+            <form action="{{ maps_url }}" method="get">
+                <button type="submit" class="nav-btn">Maps</button>
+            </form>
+        </li>
+
+        <li>
+            <form action="{{ food_url }}" method="get">
+                <button type="submit" class="nav-btn">Add Food</button>
+            </form>
+        </li>
+
+        <li>
+            <form action="{{ clock_url }}" method="get">
+                <button type="submit" class="nav-btn">Clock In/Out</button>
+            </form>
+        </li>
+
+        <li>
+            <form action="{{ logout_url }}" method="post">
+                <button type="submit" class="nav-btn">Logout</button>
+            </form>
+        </li>
+    </ul>
+</nav>
 
   {% if session.get("flash_msg") %}
     <div class="card">
