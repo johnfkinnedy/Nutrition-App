@@ -1,0 +1,149 @@
+/* =========================
+   Map-only styling (SAFE)
+   ========================= */
+
+.map-topbar{
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 14px;
+  padding: 14px 18px;
+  background: rgba(255,255,255,0.90);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+
+.map-brand{
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.map-brandname{
+  font-weight: 900;
+  letter-spacing: 0.3px;
+  font-size: 18px;
+}
+
+.map-tag{
+  font-size: 12px;
+  font-weight: 800;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #e9f2ff;
+  border: 1px solid rgba(0,0,0,0.06);
+}
+
+.map-meta{
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.map-pill{
+  min-width: 140px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.85);
+  border: 1px solid rgba(0,0,0,0.06);
+  box-shadow: 0 10px 22px rgba(0,0,0,0.08);
+}
+
+.map-pill-label{
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.map-pill-value{
+  margin-top: 4px;
+  font-weight: 900;
+}
+
+.map-page{
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 22px 18px 60px;
+}
+
+.map-hero{
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 18px 0;
+}
+
+.map-title{
+  margin: 0;
+  font-size: 34px;
+}
+
+.map-subtitle{
+  margin: 8px 0 0;
+  opacity: 0.8;
+  max-width: 60ch;
+}
+
+.map-btn{
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 900;
+  cursor: pointer;
+  background: #1e73be;
+  color: #fff;
+}
+
+.map-btn:hover{
+  filter: brightness(0.95);
+}
+
+.map-card{
+  background: rgba(255,255,255,0.92);
+  border: 1px solid rgba(0,0,0,0.06);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 18px 46px rgba(0,0,0,0.12);
+}
+
+.map-cardhead{
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+
+.map-status{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.map-dot{
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 6px rgba(34,197,94,0.15);
+}
+
+.map-statustext{
+  margin: 0;
+  font-weight: 800;
+  opacity: 0.9;
+}
+
+.map-canvas{
+  width: 100%;
+  height: 560px;
+}
+
+/* Mobile */
+@media (max-width: 700px){
+  .map-title{ font-size: 26px; }
+  .map-canvas{ height: 480px; }
+  .map-pill{ min-width: 0; width: 100%; }
+}
