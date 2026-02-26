@@ -1,6 +1,5 @@
 """
 Unit tests for NutriLog application.
-Run with: python -m unittest test_nutrilog.py -v
 
 Covers:
   - security.py  : encrypt_password / decrypt_password
