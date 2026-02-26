@@ -15,10 +15,6 @@ from datetime import datetime, timedelta
 import sys
 import os
 
-# ---------------------------------------------------------------------------
-# Make sure the project root is on sys.path so imports work.
-# Adjust the path below if your source files are in a sub-directory.
-# ---------------------------------------------------------------------------
 PROJECT_ROOT = os.path.join(os.path.dirname(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
