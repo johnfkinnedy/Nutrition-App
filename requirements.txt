@@ -1,0 +1,9 @@
+mysql-connector-python
+mysql-connector
+passlib
+flask
+werkzeug
+pillow
+torch
+torchvision
+pathlib
