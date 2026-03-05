@@ -502,6 +502,25 @@ def _fetch_saved_meals_for_user(user_id: int, limit: int = 25):
 
     return saved
 
+# =========================
+# NEW: Group saved meals by day
+# =========================
+def _group_saved_meals_by_day(saved_meals: list[dict]):
+    """
+    Input: saved_meals list with 'created_at' like "YYYY-MM-DD HH:MM:SS"
+    Output: list of dicts: [{"day":"YYYY-MM-DD","meals":[...]}] sorted newest day first.
+    """
+    buckets = {}
+
+    for m in (saved_meals or []):
+        created_at = (m.get("created_at") or "").strip()
+        day = created_at[:10] if len(created_at) >= 10 else "Unknown Date"
+        buckets.setdefault(day, []).append(m)
+
+    days_sorted = sorted(buckets.keys(), reverse=True)
+    grouped = [{"day": d, "meals": buckets[d]} for d in days_sorted]
+    return grouped
+
 @food_bp.route("/db_debug", methods=["GET"])
 def db_debug():
     if not _require_login():
@@ -570,6 +589,9 @@ def index():
     except Exception:
         saved_meals = []
 
+    # NEW: grouped by day
+    saved_meals_grouped = _group_saved_meals_by_day(saved_meals)
+
     # Nav URLs (your template references these)
     maps_url = url_for("maps.index")
     food_url = url_for("food.index")
@@ -584,6 +606,7 @@ def index():
         current_preds=current_preds,
         history=history,
         saved_meals=saved_meals,
+        saved_meals_grouped=saved_meals_grouped,  # <-- pass grouped
         fmt_num=_fmt_num,
         maps_url=maps_url,
         food_url=food_url,
@@ -1141,43 +1164,52 @@ PAGE_HTML = r"""
       </div>
     </h3>
 
-    {% if saved_meals and saved_meals|length > 0 %}
-      <div style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
-        {% for m in saved_meals %}
-          <div style="border:1px solid #eee; border-radius:12px; padding:12px; background:#fafafa;">
-            <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-              <div><b>{{ m.created_at }}</b></div>
-              <div class="muted">Meal #{{ m.log_id }}</div>
+    {% if saved_meals_grouped and saved_meals_grouped|length > 0 %}
+      <div style="display:flex; flex-direction:column; gap:16px; margin-top:10px;">
+        {% for day_block in saved_meals_grouped %}
+          <div style="border:1px solid #eaeaea; border-radius:14px; padding:12px; background:#fff;">
+            <h4 style="margin:0 0 10px 0;">{{ day_block.day }}</h4>
+
+            <div style="display:flex; flex-direction:column; gap:10px;">
+              {% for m in day_block.meals %}
+                <div style="border:1px solid #eee; border-radius:12px; padding:12px; background:#fafafa;">
+                  <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                    <div><b>{{ m.created_at }}</b></div>
+                    <div class="muted">Meal #{{ m.log_id }}</div>
+                  </div>
+
+                  {% if m.meal_items and m.meal_items|length > 0 %}
+                    <div style="margin-top:10px; display:flex; flex-direction:column; gap:10px;">
+                      {% for it in m.meal_items %}
+                        <div style="border:1px solid #eee; border-radius:12px; padding:10px; background:#fff;">
+                          <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+                            <div>
+                              <b>{{ it.label }}</b>
+                              {% if it.grams %}<span class="muted"> — {{ it.grams }} g</span>{% endif %}
+                            </div>
+                            {% if it.calories is not none %}
+                              <div class="muted">{{ fmt_num(it.calories, 0) }} calories</div>
+                            {% endif %}
+                          </div>
+
+                          <div class="nutri-grid">
+                            <div><b>Protein (g)</b> {{ fmt_num(it.protein, 1) }}</div>
+                            <div><b>Carbs (g)</b> {{ fmt_num(it.carbohydrates, 1) }}</div>
+                            <div><b>Fats (g)</b> {{ fmt_num(it.fats, 1) }}</div>
+                            <div><b>Fiber (g)</b> {{ fmt_num(it.fiber, 1) }}</div>
+                            <div><b>Sugars (g)</b> {{ fmt_num(it.sugars, 1) }}</div>
+                            <div><b>Sodium (mg)</b> {{ fmt_num(it.sodium, 0) }}</div>
+                          </div>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <div class="muted" style="margin-top:8px;">(No items)</div>
+                  {% endif %}
+                </div>
+              {% endfor %}
             </div>
 
-            {% if m.meal_items and m.meal_items|length > 0 %}
-              <div style="margin-top:10px; display:flex; flex-direction:column; gap:10px;">
-                {% for it in m.meal_items %}
-                  <div style="border:1px solid #eee; border-radius:12px; padding:10px; background:#fff;">
-                    <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;">
-                      <div>
-                        <b>{{ it.label }}</b>
-                        {% if it.grams %}<span class="muted"> — {{ it.grams }} g</span>{% endif %}
-                      </div>
-                      {% if it.calories is not none %}
-                        <div class="muted">{{ fmt_num(it.calories, 0) }} calories</div>
-                      {% endif %}
-                    </div>
-
-                    <div class="nutri-grid">
-                      <div><b>Protein (g)</b> {{ fmt_num(it.protein, 1) }}</div>
-                      <div><b>Carbs (g)</b> {{ fmt_num(it.carbohydrates, 1) }}</div>
-                      <div><b>Fats (g)</b> {{ fmt_num(it.fats, 1) }}</div>
-                      <div><b>Fiber (g)</b> {{ fmt_num(it.fiber, 1) }}</div>
-                      <div><b>Sugars (g)</b> {{ fmt_num(it.sugars, 1) }}</div>
-                      <div><b>Sodium (mg)</b> {{ fmt_num(it.sodium, 0) }}</div>
-                    </div>
-                  </div>
-                {% endfor %}
-              </div>
-            {% else %}
-              <div class="muted" style="margin-top:8px;">(No items)</div>
-            {% endif %}
           </div>
         {% endfor %}
       </div>
@@ -1291,18 +1323,18 @@ PAGE_HTML = r"""
       }
     }
 
-function openOutlookWithBody(bodyText) {
-  // Opens the user's default mail app (often Outlook on Windows) via mailto:
-  // Note: mailto length limits exist; if you have tons of saved meals, it may truncate.
-  const subject = encodeURIComponent("NutriLog Saved Meals");
-  const body = encodeURIComponent(bodyText);
-  window.location.href = `mailto:?subject=${subject}&body=${body}`;
-}
+    function openOutlookWithBody(bodyText) {
+      // Opens the user's default mail app (often Outlook on Windows) via mailto:
+      // Note: mailto length limits exist; if you have tons of saved meals, it may truncate.
+      const subject = encodeURIComponent("NutriLog Saved Meals");
+      const body = encodeURIComponent(bodyText);
+      window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    }
 
     let shareSavedStatusTimer = null;
 
     if (shareSavedBtn) {
-    shareSavedBtn.addEventListener("click", async () => {
+      shareSavedBtn.addEventListener("click", async () => {
         const savedMeals = window.SAVED_MEALS || [];
         const text = savedMealsToShareText(savedMeals);
 
@@ -1313,22 +1345,22 @@ function openOutlookWithBody(bodyText) {
 
         // Update status
         if (shareSavedStatus) {
-        shareSavedStatus.textContent = ok
+          shareSavedStatus.textContent = ok
             ? "Copied! Opening Outlook compose..."
             : "Could not auto-copy (browser blocked it). Opening Outlook anyway...";
 
-        // clear previous timer (if they click twice quickly)
-        if (shareSavedStatusTimer) clearTimeout(shareSavedStatusTimer);
+          // clear previous timer (if they click twice quickly)
+          if (shareSavedStatusTimer) clearTimeout(shareSavedStatusTimer);
 
-        // Clear after 5 seconds
-        shareSavedStatusTimer = setTimeout(() => {
+          // Clear after 5 seconds
+          shareSavedStatusTimer = setTimeout(() => {
             if (shareSavedStatus) shareSavedStatus.textContent = "";
             shareSavedStatusTimer = null;
-        }, 5000);
+          }, 5000);
         }
 
         openOutlookWithBody(text);
-    });
+      });
     }
 
     function renderPredictions(preds) {
