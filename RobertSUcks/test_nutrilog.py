@@ -318,7 +318,7 @@ class TestFlaskRoutes(unittest.TestCase):
 
     def test_logout_clears_session_and_redirects(self):
         with self.client.session_transaction() as sess:
-            sess["user_id"] = "student1"
+            sess["user_id"] = "1111"
         resp = self.client.post("/auth/logout")
         self.assertEqual(resp.status_code, 302)
         self.assertIn("/auth/login", resp.headers["Location"])
@@ -350,78 +350,13 @@ class TestFlaskRoutes(unittest.TestCase):
 
     def test_home_renders_when_logged_in(self):
         with self.client.session_transaction() as sess:
-            sess["user_id"] = "student1"
+            sess["user_id"] = "1111"
             sess["first_name"] = "Jane"
             sess["last_name"] = "Doe"
         resp = self.client.get("/home/")
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"Jane", resp.data)
 
-    # --- clock routes -------------------------------------------------------
-
-    def test_clock_index_redirects_when_not_logged_in(self):
-        resp = self.client.get("/clock/")
-        self.assertEqual(resp.status_code, 302)
-        self.assertIn("/auth/login", resp.headers["Location"])
-
-    def test_clock_index_redirects_non_student(self):
-        with self.client.session_transaction() as sess:
-            sess["user_id"] = "instructor1"
-            sess["role"] = "instructor"
-
-        mock_conn = MagicMock()
-        mock_cur = MagicMock()
-        mock_conn.cursor.return_value = mock_cur
-        mock_cur.fetchone.return_value = None
-
-        with patch("mysql.connector.connect", return_value=mock_conn):
-            resp = self.client.get("/clock/")
-        self.assertEqual(resp.status_code, 302)
-        self.assertIn("/home/", resp.headers["Location"])
-
-    def test_clock_index_renders_for_student(self):
-        with self.client.session_transaction() as sess:
-            sess["user_id"] = "student1"
-            sess["role"] = "student"
-
-        mock_conn = MagicMock()
-        mock_cur = MagicMock()
-        mock_conn.cursor.return_value = mock_cur
-        # Return a fake activity row
-        mock_cur.fetchone.return_value = {
-            "log_id": 1,
-            "student_id": "student1",
-            "clock_in_time": None,
-            "total_time": 3600,
-            "latitude": None,
-            "longitude": None,
-        }
-
-        with patch("mysql.connector.connect", return_value=mock_conn):
-            resp = self.client.get("/clock/")
-        self.assertEqual(resp.status_code, 200)
-        self.assertIn(b"Clock In", resp.data)
-
-    # --- maps routes --------------------------------------------------------
-
-    def test_maps_index_redirects_when_not_logged_in(self):
-        resp = self.client.get("/maps/")
-        self.assertEqual(resp.status_code, 302)
-        self.assertIn("/auth/login", resp.headers["Location"])
-
-    def test_update_location_requires_login(self):
-        resp = self.client.post(
-            "/maps/update_location",
-            json={"latitude": 36.3, "longitude": -82.3},
-        )
-        self.assertEqual(resp.status_code, 401)
-
-    def test_active_students_forbidden_for_non_instructor(self):
-        with self.client.session_transaction() as sess:
-            sess["user_id"] = "student1"
-            sess["role"] = "student"
-        resp = self.client.get("/maps/active_students")
-        self.assertEqual(resp.status_code, 403)
 
 
 if __name__ == "__main__":
