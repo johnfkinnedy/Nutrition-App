@@ -14,9 +14,7 @@ import torch
 import torch.nn as nn
 from torchvision import models, transforms
 
-# =========================
 # DB CONFIG (MATCH auth.py)
-# =========================
 DB_CONFIG = {
     "host": "localhost",
     "port": 3306,
@@ -25,6 +23,7 @@ DB_CONFIG = {
     "database": "NutriLog",
 }
 
+# helper to get a new DB connection (remember to close it!)
 def _db_conn():
     return mysql.connector.connect(**DB_CONFIG)
 
@@ -53,6 +52,7 @@ NUTRITION_CSV_PATH = BASE_DIR / "../fixed_nutrition.csv"
 # Fields we want to compute & display
 NUTRI_FIELDS = ["calories", "protein", "carbohydrates", "fats", "fiber", "sugars", "sodium"]
 
+# Normalizes labels for better matching between model predictions and nutrition CSV entries.
 def _norm_label(s: str) -> str:
     """Normalize labels to improve matching between model labels and CSV rows."""
     s = (s or "").strip().lower()
@@ -60,6 +60,7 @@ def _norm_label(s: str) -> str:
     s = re.sub(r"\s+", " ", s)
     return s
 
+# Helper to safely parse floats, with support for strings with commas and empty values.
 def _to_float(x, default=None):
     try:
         if x is None:
@@ -78,6 +79,7 @@ def _to_float(x, default=None):
 # nutrition_cache maps normalized food label -> dict with base_grams and nutrients per that base_grams
 _nutrition_cache = None
 
+# Loads the nutrition CSV into _nutrition_cache for fast lookup. Handles both header and no-header formats.
 def _load_nutrition_cache():
     """
     Loads fixed_nutrition.csv into a dictionary for fast lookup.
@@ -86,16 +88,22 @@ def _load_nutrition_cache():
       - No-header CSV: fallback to fixed positions
     Required: base grams is column index 2 (3rd column).
     """
+
+    # Use cached version if already loaded
     global _nutrition_cache
     if _nutrition_cache is not None:
         return _nutrition_cache
 
+    # Create cache if doesn't exist
     cache = {}
+
+    # Check if CSV file exists
     if not NUTRITION_CSV_PATH.exists():
         print(f"[FOOD_ML] WARNING: Nutrition CSV not found at {NUTRITION_CSV_PATH}")
         _nutrition_cache = cache
         return cache
 
+    # Read CSV and populate cache
     try:
         with open(NUTRITION_CSV_PATH, "r", newline="", encoding="utf-8-sig") as f:
             # sniff header
@@ -106,6 +114,8 @@ def _load_nutrition_cache():
             reader = csv.reader(f)
 
             header = None
+
+            # If header exists, normalize it for easier matching. If not, we'll rely on fixed column positions.
             if has_header:
                 header = next(reader, None)
                 header_norm = [_norm_label(h) for h in (header or [])]
@@ -160,6 +170,7 @@ def _load_nutrition_cache():
                         "sodium": ["sodium", "salt"],
                     }
 
+                    # for each nutrient field, find the first matching column in the header and parse it
                     for field, keys in synonyms.items():
                         idx = None
                         for k in keys:
@@ -189,13 +200,18 @@ def _load_nutrition_cache():
                 cache[label_n] = entry
 
         print(f"[FOOD_ML] Loaded nutrition rows: {len(cache)} from fixed_nutrition.csv")
+
+    # csv reading errors should not crash the app, just result in an empty cache
     except Exception as e:
         print(f"[FOOD_ML] ERROR reading nutrition CSV: {e}")
         cache = {}
 
+
+    # save cache to global variable for future use
     _nutrition_cache = cache
     return cache
 
+# Given a food label and grams eaten, compute the scaled nutrition based on the cache.
 def _compute_scaled_nutrition(label: str, grams: int | None):
     """
     Returns dict containing:
@@ -203,17 +219,22 @@ def _compute_scaled_nutrition(label: str, grams: int | None):
       calories, protein, carbohydrates, fats, fiber, sugars, sodium
     Values are scaled to grams. Missing values stay None.
     """
+
+    # if 0 grams or not provided, return early with just the grams_eaten field (which will be None or 0)
     if grams is None:
         return {"grams_eaten": None}
 
+    # parse grams safely, ensuring it's a positive number. If invalid, treat as None.
     grams_f = _to_float(grams, default=None)
     if grams_f is None or grams_f <= 0:
         return {"grams_eaten": None}
 
+    # load nutrition cache and find matching label
     cache = _load_nutrition_cache()
     key = _norm_label(label)
     row = cache.get(key)
 
+    # if no matching label or missing/invalid base grams, we can't compute nutrition, but we can still return the grams eaten
     if not row:
         # no nutrition match found
         return {
@@ -221,6 +242,7 @@ def _compute_scaled_nutrition(label: str, grams: int | None):
             "nutrition_found": False,
         }
 
+    # base grams is required to scale nutrition. If missing or invalid, return with nutrition_found=False but still include grams_eaten.
     base_grams = row.get("base_grams")
     if not base_grams or base_grams <= 0:
         return {
@@ -230,6 +252,7 @@ def _compute_scaled_nutrition(label: str, grams: int | None):
 
     scale = grams_f / float(base_grams)
 
+    # build output dict with scaled nutrition values. If specific nutrient is missing in the CSV, it will be None in the output.
     out = {
         "grams_eaten": int(grams_f),
         "base_grams": float(base_grams),
@@ -245,6 +268,7 @@ def _compute_scaled_nutrition(label: str, grams: int | None):
 
     return out
 
+# Helper to format numbers for display, with safe handling of None and non-numeric values.
 def _fmt_num(x, digits=1):
     if x is None:
         return ""
@@ -253,7 +277,7 @@ def _fmt_num(x, digits=1):
     except Exception:
         return ""
 
-# --------- Load class mapping ----------
+# Load class mapping from idx_to_class.json, and build a sorted list of class names for display.
 with open(IDX_TO_CLASS_PATH, "r") as f:
     idx_to_class = json.load(f)
 idx_to_class = {int(k): v for k, v in idx_to_class.items()}
@@ -263,7 +287,7 @@ num_classes = len(idx_to_class)
 print(f"[FOOD_ML] Loaded {num_classes} classes from idx_to_class.json")
 print(f"[FOOD_ML] Sample classes: {class_names[:5]}")
 
-# --------- Build model (must match training) ----------
+# Build model (must match training)
 def build_model(num_classes: int) -> torch.nn.Module:
     model = models.resnet50(weights=None)
     in_features = model.fc.in_features
@@ -285,7 +309,7 @@ def _load_model():
     print("[FOOD_ML] Model loaded successfully")
     return model
 
-# --------- Preprocess (must match your test_tfms) ----------
+# Preprocess (must match your test_tfms)
 preprocess = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -295,6 +319,7 @@ preprocess = transforms.Compose([
     ),
 ])
 
+# function to predict top-k classes for a given PIL image, returning a list of (label, probability) tuples.
 @torch.no_grad()
 def predict_topk(pil_img: Image.Image, k: int = 3):
     m = _load_model()
@@ -310,15 +335,18 @@ def predict_topk(pil_img: Image.Image, k: int = 3):
         results.append((label, float(p)))
     return results
 
+# helper to check if user is logged in. Used in all routes to protect them.
 def _require_login():
     return session.get("user_id") is not None
 
+# helper to get prediction history from session, ensuring it's always a list.
 def _session_get_pred_history():
     hist = session.get("predicted_history", [])
     if not isinstance(hist, list):
         hist = []
     return hist
 
+# helper to save uploaded file to static directory and return its URL. Ensures unique filenames and allowed extensions.
 def _save_upload_to_static(file_storage) -> str:
     orig_name = secure_filename(file_storage.filename or "upload.jpg")
     ext = Path(orig_name).suffix.lower()
@@ -331,6 +359,7 @@ def _save_upload_to_static(file_storage) -> str:
 
     return url_for("static", filename=f"food_uploads/{out_name}")
 
+# Helper to build navigation buttons HTML. Your template references maps_url, food_url, clock_url, and logout_url which are generated here.
 def _build_nav_buttons() -> str:
     logout_url = url_for("auth.logout")
     maps_url = url_for("maps.index")
@@ -350,29 +379,39 @@ def _build_nav_buttons() -> str:
     """
     return nav_buttons
 
+# parses the meal_items_json field from the database, which can be in various formats (list of strings, list of dicts, JSON string) and normalizes it to a list of dicts with label and grams.
 def _parse_items_json(val):
     """
     Returns a list.
     Supports old format: ["pizza", "apple"]
     Supports new format: [{"label":"pizza","grams":180,"calories":...}, ...]
     """
+
+    # if value is None, return empty list
     if val is None:
         return []
+    
+    # if value is bytes, try to decode it as utf-8 string
     if isinstance(val, (bytes, bytearray)):
         try:
             val = val.decode("utf-8", errors="ignore")
         except Exception:
             return []
+        
+    #if value is a string, try to parse it as JSON. If parsing fails, return empty list.
     if isinstance(val, str):
         try:
             out = json.loads(val)
             return out if isinstance(out, list) else []
         except Exception:
             return []
+
+    # if value is already a list, return it. Otherwise return empty list.
     if isinstance(val, list):
         return val
     return []
 
+# Helper to normalize meal items into a consistent format. Ensures each item is a dict with at least 'label' and 'grams', and preserves any existing nutrient info if present. Backward compatible with old list-of-strings format.
 def _normalize_meal_list(meal):
     """
     Ensure meal is always a list of dicts with:
@@ -382,6 +421,7 @@ def _normalize_meal_list(meal):
     if not isinstance(meal, list):
         return []
 
+    # normalize each item in the meal list to ensure it's a dict with the expected fields. If item is a string, convert it to dict with label and None grams. If it's already a dict, ensure it has label and grams, and preserve any existing nutrient info.
     normalized = []
     for it in meal:
         if isinstance(it, str):
@@ -389,11 +429,14 @@ def _normalize_meal_list(meal):
         elif isinstance(it, dict):
             lbl = (it.get("label") or it.get("name") or "").strip()
             grams = it.get("grams", None)
+
+            # safely parse grams to int if possible, otherwise set to None. This handles cases where grams might be a string or invalid value.
             try:
                 grams = int(float(grams)) if grams is not None and str(grams).strip() != "" else None
             except Exception:
                 grams = None
 
+            # if label is missing or empty, skip this item since it's not valid. We can still keep items with missing grams, but label is essential for display and nutrition lookup.
             if not lbl:
                 continue
 
@@ -409,6 +452,7 @@ def _normalize_meal_list(meal):
 
     return normalized
 
+# Helper to parse grams input from the form, ensuring it's a positive integer and within reasonable bounds. If invalid, returns None or a default value.
 def _parse_grams_from_request(default_grams=100):
     raw = (request.form.get("grams", "") or "").strip()
     if raw == "":
@@ -423,6 +467,7 @@ def _parse_grams_from_request(default_grams=100):
         return 5000
     return g
 
+# Helper to apply nutrition info to a meal item dict based on its label and grams. Mutates the item in-place. If nutrition info is not found, sets nutrient fields to None but leaves label and grams intact.
 def _apply_nutrition_to_item(item: dict):
     """
     Mutates item in-place: fills calories/protein/carbs/fats/fiber/sugars/sodium
@@ -442,6 +487,7 @@ def _apply_nutrition_to_item(item: dict):
         item[f] = scaled.get(f, None)
     return item
 
+# Helper to fetch saved meals for a user from the Meal_Log table, parse and normalize them, and return a list of meals with their items and nutrition info. Handles various formats of stored meal items and ensures the output is consistent for display.
 def _fetch_saved_meals_for_user(user_id: int, limit: int = 25):
     """
     Reads saved meals from Meal_Log for this user.
@@ -502,9 +548,7 @@ def _fetch_saved_meals_for_user(user_id: int, limit: int = 25):
 
     return saved
 
-# =========================
-# NEW: Group saved meals by day
-# =========================
+# NEW: Group saved meals by day based on their created_at timestamp. This allows the template to display meals grouped by day with a header for each day.
 def _group_saved_meals_by_day(saved_meals: list[dict]):
     """
     Input: saved_meals list with 'created_at' like "YYYY-MM-DD HH:MM:SS"
@@ -521,6 +565,7 @@ def _group_saved_meals_by_day(saved_meals: list[dict]):
     grouped = [{"day": d, "meals": buckets[d]} for d in days_sorted]
     return grouped
 
+# --------- Routes ----------
 @food_bp.route("/db_debug", methods=["GET"])
 def db_debug():
     if not _require_login():
@@ -566,6 +611,7 @@ def db_debug():
 
     return jsonify(info)
 
+# Main page for food logging. Displays current meal items, search form, image upload form, prediction results, and saved meals. Handles various formats of meal items in session and ensures nutrition info is computed for display.
 @food_bp.route("/", methods=["GET"])
 def index():
     if not _require_login():
@@ -613,6 +659,7 @@ def index():
         clock_url=clock_url,
     )
 
+# Route to handle image upload and prediction. Validates login, checks for uploaded file, saves it, runs prediction, stores results in session, and redirects back to index. Also supports AJAX requests by returning JSON responses with appropriate status codes.
 @food_bp.route("/predict", methods=["POST"])
 def predict():
     if not _require_login():
@@ -656,6 +703,7 @@ def predict():
 
     return redirect(url_for("food.index"))
 
+# Route to handle search form submission. Validates login, gets search query, stores it in session, and redirects back to index. The index route will use this query to pre-fill the search box and filter class names for display.
 @food_bp.route("/set_search", methods=["POST"])
 def set_search():
     if not _require_login():
@@ -665,6 +713,7 @@ def set_search():
     session["last_search_query"] = q
     return redirect(url_for("food.index"))
 
+# Route to add a food item to the current meal. Validates login, gets chosen label and grams from form, computes nutrition, updates session meal list, and redirects back to index. Also updates prediction history if applicable.
 @food_bp.route("/add", methods=["POST"])
 def add_food():
     if not _require_login():
@@ -707,6 +756,7 @@ def add_food():
     session["last_search_query"] = ""
     return redirect(url_for("food.index"))
 
+# Route to remove a meal item by index. Validates login, gets index from form, updates session meal list, and redirects back to index. Ensures index is valid before modifying the meal list.
 @food_bp.route("/remove_meal_item", methods=["POST"])
 def remove_meal_item():
     if not _require_login():
@@ -725,6 +775,7 @@ def remove_meal_item():
 
     return redirect(url_for("food.index"))
 
+# Route to edit a meal item by index. Validates login, gets index, new label, and new grams from form, updates the specific meal item in session, and redirects back to index. Recomputes nutrition for the edited item.
 @food_bp.route("/edit_meal_item", methods=["POST"])
 def edit_meal_item():
     """
@@ -755,6 +806,7 @@ def edit_meal_item():
 
     return redirect(url_for("food.index"))
 
+# Route to clear the current meal list in session. Validates login, resets meal_items to an empty list, and redirects back to index.
 @food_bp.route("/clear_meal", methods=["POST"])
 def clear_meal():
     if not _require_login():
@@ -762,6 +814,7 @@ def clear_meal():
     session["meal_items"] = []
     return redirect(url_for("food.index"))
 
+# Route to clear the prediction history in session. Validates login, resets predicted_history to an empty list, and redirects back to index.
 @food_bp.route("/clear_history", methods=["POST"])
 def clear_history():
     if not _require_login():
@@ -769,6 +822,7 @@ def clear_history():
     session["predicted_history"] = []
     return redirect(url_for("food.index"))
 
+# Route to save the current meal list in session to the Meal_Log table in the database. Validates login, ensures meal list is not empty, computes nutrition for each item, saves as JSON with a timestamp, and redirects back to index with a success or error message.
 @food_bp.route("/save_meal", methods=["POST"])
 def save_meal():
     """
@@ -840,7 +894,7 @@ def save_meal():
         except Exception:
             pass
 
-
+# PAGE_HTML is the HTML template for the food logging page. It includes the structure for displaying the meal items, search form, image upload, prediction results, and saved meals. The template uses Jinja2 syntax to loop through data and conditionally display elements. It also includes inline CSS for styling the page.
 PAGE_HTML = r"""
 <!doctype html>
 <html>
