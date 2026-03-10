@@ -11,10 +11,13 @@ This will help everybody improve
 their lives. ​
 
 ## Project Goals + Release Plan 
+The goal for this project is to have a working application that enables it's users to track their foor intake. Along with just tracking their food it also keeps track of their calories, other nutritional information, a daily, weekly, and monthly report, and other QOL features. We have released the base application and are currently working on adding new features.  
 
 ## Coding Standards
+Our code is in Python, so we are keeping to the Python coding standards.
 
 ## Documentation Standards
+Our code is commented in order to help everybody understand what is being done in each section. 
 
 ## Development environment (stack)
 For this project, our main programming language is Python (version 3.12). Within Python, we use the library Flask (in conjunction with HTML and CSS) for our web application for its ease of use and flexibility in deployment. We also use the PyTest library and the built-in UnitTest framework to conduct small-scale unit testing. Another testing framework we plan to use is Selenium, to automate the testing of the web application. A comprehensive list of libraries used in the project is available in 'requirements.txt'. We also use MySQLServer to hold our database. 
