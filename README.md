@@ -1,5 +1,7 @@
 # Nutrition-App
 
+## Trello Link
+https://trello.com/b/E9Ex153P/operational-plan
 ## Product Vision
   Nutrilog is for anybody looking to
 be healthier.  This app will enable
@@ -12,6 +14,9 @@ their lives. ​
 
 ## Project Goals + Release Plan 
 The goal for this project is to have a working application that enables it's users to track their foor intake. Along with just tracking their food it also keeps track of their calories, other nutritional information, a daily, weekly, and monthly report, and other QOL features. We have released the base application and are currently working on adding new features.  
+
+## UI Design
+The U/I design has been a focus on simplicity and usability. The goal was allow users to easily navigate the system and interact with features without any confusion. We are steadily enhancing the frontend to provide a better visual presentation and overall a better user experience.
 
 ## Coding Standards
 Our code is in Python, so we are keeping to the Python coding standards.
@@ -27,12 +32,27 @@ Our product has so far been deployed only on our local machines, which are eithe
 Our main version contril is GitHub. We use a combination of GitHub Desktop, GitHub in Visual Studio Code, and the CLI version to ensure all code is up to date and everyone is working on the same version of the project. We also create branches to develop larger features to segment it from the app while we're developing and before it is ready for release. Our main branch is used for documentation updates and small code changes/bug fixes rather than large releases. 
 ## Change Management / Bug tracking
 We also use GitHub for change management, as it automatically tracks what lines have been updated and edited and by whom. To track bugs, we communicate among the team and leave comments in the code, although we plan to start using GitHub's bug tracking features after the sprint 4 release. 
-## Definition of 
-  Ready:
-  Done: 
+## Definition of
+Ready (when all are checked): 
+- Description clearly explains the goal
+- Acceptance criteria are written
+- Dependencies are identified
+- UX/UI expectations are defined (if applicable)
+- Story is estimated by the team
+- Story fits within one sprint
+- Required data is available
 
+Done (when all are checked):
+- Data/Image upload works
+- Model prediction returns correct class
+- Nutrition scaled using fixed_nutrition.csv
+- Results saved to database
+- Results displayed to user
+- Error handling implemented
+- Tested with multiple foods
+- Code pushed to repository
 
-**When setting up MySQL:
+### **When setting up MySQL:
 - Install and configure from https://www.oracle.com/mysql/technologies/mysql-enterprise-edition-downloads.html  (GO TO THE WINDOWS TAB)
   - really only need mysql-commercial folder
     - inside the mysql-commercial BIN folder, run mysql_configurator.exe
