@@ -16,9 +16,9 @@ from torchvision import models, transforms
 
 # DB CONFIG (MATCH auth.py)
 DB_CONFIG = {
-    "host": "localhost",
+    "host": "nurilog-db.mysql.database.azure.com",
     "port": 3306,
-    "user": "root",
+    "user": "tylercoleroot",
     "password": "Barker123!",
     "database": "NutriLog",
 }

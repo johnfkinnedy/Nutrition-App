@@ -4,9 +4,9 @@ import mysql.connector
 maps_bp = Blueprint("maps", __name__, url_prefix="/maps")
 
 DB_CONFIG = {
-    "host": "localhost",
+    "host": "nurilog-db.mysql.database.azure.com",
     "port": 3306,
-    "user": "root",
+    "user": "tylercoleroot",
     "password": "Barker123!",
     "database": "NutriLog",
 }

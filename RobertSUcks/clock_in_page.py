@@ -6,9 +6,9 @@ clock_bp = Blueprint("clock", __name__, url_prefix="/clock")
 
 # Database connection
 DB_CONFIG = {
-    "host": "localhost",
+    "host": "nurilog-db.mysql.database.azure.com",
     "port": 3306,
-    "user": "root",
+    "user": "tylercoleroot",
     "password": "Barker123!",
     "database": "NutriLog",
 }
@@ -117,7 +117,7 @@ def index():
     maps_url = url_for("maps.index")
     food_url = url_for("food.index")
     logout_url = url_for("auth.logout")
-
+    
     return render_template_string(
         """
         <!DOCTYPE html>
