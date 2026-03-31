@@ -14,9 +14,9 @@ auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
 #setting up config for DB; we should probably move this to another space so our root password isn't open access
 DB_CONFIG = {
-    "host": "localhost",
+    "host": "nurilog-db.mysql.database.azure.com",
     "port": 3306,
-    "user": "root",
+    "user": "tylercoleroot",
     "password": "Barker123!",
     "database": "NutriLog",
 }

@@ -4,9 +4,9 @@ from security import encrypt_password, decrypt_password
 def createDatabaseFromFile():
   # Establish a connection to the MySQL server
   DB_CONFIG = {
-    "host": "localhost",
+    "host": "nurilog-db.mysql.database.azure.com",
     "port": 3306,
-    "user": "root",
+    "user": "tylercoleroot",
     "password": "Barker123!"  
     }
   
