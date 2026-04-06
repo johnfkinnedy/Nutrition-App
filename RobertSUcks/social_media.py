@@ -123,6 +123,74 @@ def _fetch_all_users():
 
     return users
 
+def _fetch_following_and_suggestions(current_user_id):
+    conn = None
+    cur = None
+    following = []
+    suggestions = []
+
+    try:
+        conn = _db_conn()
+        cur = conn.cursor(dictionary=True)
+
+        cur.execute(
+            """
+            SELECT
+                u.user_id,
+                u.first_name,
+                u.last_name
+            FROM Social_Follows sf
+            INNER JOIN Users u
+                ON sf.followed_user_id = u.user_id
+            WHERE sf.follower_user_id = %s
+            ORDER BY u.first_name ASC, u.last_name ASC, u.user_id ASC
+            """,
+            (current_user_id,)
+        )
+        rows = cur.fetchall() or []
+        followed_ids = set()
+
+        for r in rows:
+            followed_ids.add(r["user_id"])
+            following.append({
+                "user_id": r["user_id"],
+                "user_name": f"{(r.get('first_name') or '').strip()} {(r.get('last_name') or '').strip()}".strip()
+            })
+
+        cur.execute(
+            """
+            SELECT user_id, first_name, last_name
+            FROM Users
+            WHERE user_id <> %s
+            ORDER BY first_name ASC, last_name ASC, user_id ASC
+            """,
+            (current_user_id,)
+        )
+        all_other_users = cur.fetchall() or []
+
+        for r in all_other_users:
+            if r["user_id"] not in followed_ids:
+                suggestions.append({
+                    "user_id": r["user_id"],
+                    "user_name": f"{(r.get('first_name') or '').strip()} {(r.get('last_name') or '').strip()}".strip()
+                })
+
+    except Exception as e:
+        session["flash_msg"] = f"Error loading follow lists: {e}"
+    finally:
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+    return following, suggestions
+
 def _fetch_comments_for_posts(post_ids):
     if not post_ids:
         return {}
@@ -234,7 +302,58 @@ def _fetch_tags_for_posts(post_ids):
 
     return tags_by_post
 
-def _fetch_all_posts():
+def _fetch_likes_for_posts(post_ids):
+    if not post_ids:
+        return {}
+
+    conn = None
+    cur = None
+    likes_by_post = {}
+
+    try:
+        conn = _db_conn()
+        cur = conn.cursor(dictionary=True)
+
+        placeholders = ",".join(["%s"] * len(post_ids))
+        query = f"""
+            SELECT
+                spl.post_id,
+                spl.user_id,
+                u.first_name,
+                u.last_name
+            FROM Social_Post_Likes spl
+            INNER JOIN Users u
+                ON spl.user_id = u.user_id
+            WHERE spl.post_id IN ({placeholders})
+            ORDER BY u.first_name ASC, u.last_name ASC, u.user_id ASC
+        """
+        cur.execute(query, tuple(post_ids))
+        rows = cur.fetchall() or []
+
+        for r in rows:
+            post_id = r["post_id"]
+            likes_by_post.setdefault(post_id, []).append({
+                "user_id": r["user_id"],
+                "user_name": f"{(r.get('first_name') or '').strip()} {(r.get('last_name') or '').strip()}".strip()
+            })
+
+    except Exception as e:
+        session["flash_msg"] = f"Error loading likes: {e}"
+    finally:
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+    return likes_by_post
+
+def _fetch_all_posts(current_user_id=None):
     conn = None
     cur = None
     posts = []
@@ -279,15 +398,21 @@ def _fetch_all_posts():
                 "updated_at": r["updated_at"].strftime("%Y-%m-%d %H:%M:%S") if r.get("updated_at") else "",
                 "comments": [],
                 "tags": [],
+                "likes": [],
+                "liked_by_current_user": False,
             })
 
         post_ids = [p["post_id"] for p in posts]
         comments_by_post = _fetch_comments_for_posts(post_ids)
         tags_by_post = _fetch_tags_for_posts(post_ids)
+        likes_by_post = _fetch_likes_for_posts(post_ids)
 
         for p in posts:
             p["comments"] = comments_by_post.get(p["post_id"], [])
             p["tags"] = tags_by_post.get(p["post_id"], [])
+            p["likes"] = likes_by_post.get(p["post_id"], [])
+            if current_user_id is not None:
+                p["liked_by_current_user"] = any(l["user_id"] == current_user_id for l in p["likes"])
 
     except Exception as e:
         session["flash_msg"] = f"Error loading posts: {e}"
@@ -318,8 +443,9 @@ def index():
     home_url = url_for("home.home")
     logout_url = url_for("auth.logout")
 
-    posts = _fetch_all_posts()
+    posts = _fetch_all_posts(current_user_id=current_user_id)
     all_users = _fetch_all_users()
+    following_users, suggested_users = _fetch_following_and_suggestions(current_user_id)
 
     return render_template_string(
         PAGE_HTML,
@@ -328,10 +454,174 @@ def index():
         last_name=last_name,
         posts=posts,
         all_users=all_users,
+        following_users=following_users,
+        suggested_users=suggested_users,
         food_url=food_url,
         home_url=home_url,
         logout_url=logout_url,
     )
+
+@social_bp.route("/follow/<int:followed_user_id>", methods=["POST"])
+def follow_user(followed_user_id):
+    if not _require_login():
+        return redirect(url_for("auth.login"))
+
+    follower_user_id = int(session.get("user_id"))
+
+    if follower_user_id == followed_user_id:
+        session["flash_msg"] = "You cannot follow yourself."
+        return redirect(url_for("social.index"))
+
+    conn = None
+    cur = None
+
+    try:
+        conn = _db_conn()
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            INSERT IGNORE INTO Social_Follows (follower_user_id, followed_user_id)
+            VALUES (%s, %s)
+            """,
+            (follower_user_id, followed_user_id),
+        )
+        conn.commit()
+        session["flash_msg"] = "User followed."
+    except Exception as e:
+        session["flash_msg"] = f"Error following user: {e}"
+    finally:
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+    return redirect(url_for("social.index"))
+
+@social_bp.route("/unfollow/<int:followed_user_id>", methods=["POST"])
+def unfollow_user(followed_user_id):
+    if not _require_login():
+        return redirect(url_for("auth.login"))
+
+    follower_user_id = int(session.get("user_id"))
+
+    conn = None
+    cur = None
+
+    try:
+        conn = _db_conn()
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            DELETE FROM Social_Follows
+            WHERE follower_user_id = %s
+              AND followed_user_id = %s
+            """,
+            (follower_user_id, followed_user_id),
+        )
+        conn.commit()
+        session["flash_msg"] = "User unfollowed."
+    except Exception as e:
+        session["flash_msg"] = f"Error unfollowing user: {e}"
+    finally:
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+    return redirect(url_for("social.index"))
+
+@social_bp.route("/like/<int:post_id>", methods=["POST"])
+def like_post(post_id):
+    if not _require_login():
+        return redirect(url_for("auth.login"))
+
+    user_id = int(session.get("user_id"))
+
+    conn = None
+    cur = None
+
+    try:
+        conn = _db_conn()
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            INSERT IGNORE INTO Social_Post_Likes (post_id, user_id)
+            VALUES (%s, %s)
+            """,
+            (post_id, user_id),
+        )
+        conn.commit()
+        session["flash_msg"] = "Post liked."
+    except Exception as e:
+        session["flash_msg"] = f"Error liking post: {e}"
+    finally:
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+    return redirect(url_for("social.index"))
+
+@social_bp.route("/unlike/<int:post_id>", methods=["POST"])
+def unlike_post(post_id):
+    if not _require_login():
+        return redirect(url_for("auth.login"))
+
+    user_id = int(session.get("user_id"))
+
+    conn = None
+    cur = None
+
+    try:
+        conn = _db_conn()
+        cur = conn.cursor()
+
+        cur.execute(
+            """
+            DELETE FROM Social_Post_Likes
+            WHERE post_id = %s
+              AND user_id = %s
+            """,
+            (post_id, user_id),
+        )
+        conn.commit()
+        session["flash_msg"] = "Post unliked."
+    except Exception as e:
+        session["flash_msg"] = f"Error unliking post: {e}"
+    finally:
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+    return redirect(url_for("social.index"))
 
 @social_bp.route("/create", methods=["POST"])
 def create_post():
@@ -572,6 +862,76 @@ def add_comment(post_id):
 
     return redirect(url_for("social.index"))
 
+@social_bp.route("/edit_comment/<int:comment_id>", methods=["POST"])
+def edit_comment(comment_id):
+    if not _require_login():
+        return redirect(url_for("auth.login"))
+
+    user_id = int(session.get("user_id"))
+    new_comment_text = (request.form.get("comment_text", "") or "").strip()
+
+    if not new_comment_text:
+        session["flash_msg"] = "Edited comment cannot be empty."
+        return redirect(url_for("social.index"))
+
+    conn = None
+    cur = None
+    cur2 = None
+
+    try:
+        conn = _db_conn()
+        cur = conn.cursor(dictionary=True)
+
+        cur.execute(
+            """
+            SELECT comment_id, user_id
+            FROM Social_Comments
+            WHERE comment_id = %s
+            """,
+            (comment_id,),
+        )
+        row = cur.fetchone()
+
+        if not row:
+            session["flash_msg"] = "Comment not found."
+            return redirect(url_for("social.index"))
+
+        if int(row["user_id"]) != user_id:
+            session["flash_msg"] = "You can only edit your own comments."
+            return redirect(url_for("social.index"))
+
+        cur2 = conn.cursor()
+        cur2.execute(
+            """
+            UPDATE Social_Comments
+            SET comment_text = %s
+            WHERE comment_id = %s
+            """,
+            (new_comment_text, comment_id),
+        )
+        conn.commit()
+        session["flash_msg"] = "Comment updated."
+    except Exception as e:
+        session["flash_msg"] = f"Error editing comment: {e}"
+    finally:
+        try:
+            if cur2:
+                cur2.close()
+        except Exception:
+            pass
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
+    return redirect(url_for("social.index"))
+
 PAGE_HTML = r"""
 <!DOCTYPE html>
 <html lang="en">
@@ -580,12 +940,26 @@ PAGE_HTML = r"""
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    .container {
-      max-width: 1000px;
+    .page-wrap {
+      max-width: 1280px;
       margin: 0 auto;
       padding: 18px;
-      display: flex;
-      flex-direction: column;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 320px;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .main-column {
+      min-width: 0;
+    }
+
+    .sidebar-column {
+      position: sticky;
+      top: 18px;
     }
 
     .card {
@@ -598,8 +972,18 @@ PAGE_HTML = r"""
       box-sizing: border-box;
     }
 
+    .sidebar-card {
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 16px;
+      background: #fff;
+      width: 100%;
+      box-sizing: border-box;
+      margin-bottom: 16px;
+    }
+
     .banner {
-      max-width: 1000px;
+      max-width: 1280px;
       margin: 20px auto 0 auto;
       padding: 18px 22px;
       border: 1px solid #ddd;
@@ -647,6 +1031,7 @@ PAGE_HTML = r"""
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
+      align-items: center;
     }
 
     .post-card {
@@ -728,6 +1113,13 @@ PAGE_HTML = r"""
       font-weight: 600;
     }
 
+    .likes-line {
+      margin: 8px 0 10px 0;
+      font-size: 14px;
+      color: #333;
+      font-weight: 600;
+    }
+
     .tag-suggestions {
       margin-top: 8px;
       border: 1px solid #ddd;
@@ -774,10 +1166,66 @@ PAGE_HTML = r"""
       font-weight: 700;
       font-size: 14px;
     }
+
+    .follow-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .follow-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid #eee;
+      border-radius: 10px;
+      background: #fafafa;
+    }
+
+    .follow-name {
+      font-weight: 600;
+      line-height: 1.3;
+    }
+
+    .follow-form {
+      margin: 0;
+    }
+
+    .sidebar-title {
+      margin: 0 0 10px 0;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .comment-edit-box {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #eee;
+      display: none;
+    }
+
+    @media (max-width: 980px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar-column {
+        position: static;
+      }
+    }
   </style>
 
   <script>
     const ALL_USERS = {{ all_users|tojson }};
+
+    function toggleCommentEdit(commentId) {
+      const box = document.getElementById("edit-comment-box-" + commentId);
+      if (!box) return;
+      box.style.display = (box.style.display === "block") ? "none" : "block";
+    }
 
     function toggleEdit(postId) {
       const box = document.getElementById("edit-box-" + postId);
@@ -910,7 +1358,7 @@ PAGE_HTML = r"""
     </div>
   </div>
 
-  <div class="container">
+  <div class="page-wrap">
     {% if session.get("flash_msg") %}
       <div class="card">
         <div class="muted">{{ session.get("flash_msg") }}</div>
@@ -918,186 +1366,272 @@ PAGE_HTML = r"""
       {% set _ = session.pop("flash_msg") %}
     {% endif %}
 
-    <div class="card">
-      <h2>Create Post</h2>
-      <form method="post" action="{{ url_for('social.create_post') }}" enctype="multipart/form-data">
-        <textarea name="content" placeholder="Write something..."></textarea>
+    <div class="main-grid">
+      <div class="main-column">
+        <div class="card">
+          <h2>Create Post</h2>
+          <form method="post" action="{{ url_for('social.create_post') }}" enctype="multipart/form-data">
+            <textarea name="content" placeholder="Write something..."></textarea>
 
-        <div class="field-row">
-          <label>
-            <input type="checkbox" name="add_location" onchange="toggleLocationInput('create-location-box', this.checked)">
-            Add location
-          </label>
-        </div>
-
-        <div class="field-row" id="create-location-box" style="display:none;">
-          <input type="text" name="location_name" placeholder="Type a location name">
-        </div>
-
-        <div class="field-row">
-          <label>
-            <input type="checkbox" name="enable_tags" onchange="toggleTagBox('create-tag-box', this.checked)">
-            Tag users
-          </label>
-        </div>
-
-        <div class="field-row" id="create-tag-box" style="display:none;">
-          <input
-            type="text"
-            id="tag-search-create"
-            placeholder="Type a name to tag"
-            autocomplete="off"
-            oninput="showTagSuggestions('tag-search-create', 'tag-suggestions-create', 'selected-tags-create')"
-          >
-          <div id="tag-suggestions-create" class="tag-suggestions"></div>
-          <div id="selected-tags-create" class="selected-tags"></div>
-          <div class="muted">Start typing and click a suggestion.</div>
-        </div>
-
-        <div class="field-row">
-          <label><b>Upload image</b></label>
-          <input type="file" name="image" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,image/*">
-        </div>
-
-        <div class="post-actions">
-          <button type="submit" class="nav-btn">Post</button>
-        </div>
-      </form>
-    </div>
-
-    <div class="card">
-      <h2>Recent Posts</h2>
-
-      {% if posts %}
-        {% for post in posts %}
-          <div class="post-card">
-            <div class="post-user"><b>{{ post.user_name }}</b></div>
-
-            {% if post.location_name %}
-              <div class="location-line">Location: {{ post.location_name }}</div>
-            {% endif %}
-
-            {% if post.tags %}
-              <div class="tag-list">
-                With:
-                {% for tag in post.tags %}
-                  {{ tag.user_name }}{% if not loop.last %}, {% endif %}
-                {% endfor %}
-              </div>
-            {% endif %}
-
-            <div class="post-content">{{ post.content }}</div>
-
-            {% if post.image_url %}
-              <img src="{{ post.image_url }}" alt="Post image" class="post-image">
-            {% endif %}
-
-            <div class="muted">
-              Created: {{ post.created_at }} |
-              Updated: {{ post.updated_at }}
+            <div class="field-row">
+              <label>
+                <input type="checkbox" name="add_location" onchange="toggleLocationInput('create-location-box', this.checked)">
+                Add location
+              </label>
             </div>
 
-            {% if post.user_id == current_user_id %}
-              <div class="post-actions">
-                <button type="button" class="nav-btn" onclick="toggleEdit({{ post.post_id }})">Edit</button>
-              </div>
+            <div class="field-row" id="create-location-box" style="display:none;">
+              <input type="text" name="location_name" placeholder="Type a location name">
+            </div>
 
-              <div class="edit-box" id="edit-box-{{ post.post_id }}">
-                <form method="post" action="{{ url_for('social.edit_post', post_id=post.post_id) }}" enctype="multipart/form-data">
-                  <textarea name="content">{{ post.content }}</textarea>
+            <div class="field-row">
+              <label>
+                <input type="checkbox" name="enable_tags" onchange="toggleTagBox('create-tag-box', this.checked)">
+                Tag users
+              </label>
+            </div>
 
-                  <div class="field-row">
-                    <label>
-                      <input
-                        type="checkbox"
-                        name="add_location"
-                        onchange="toggleLocationInput('edit-location-box-{{ post.post_id }}', this.checked)"
-                        {% if post.location_name %}checked{% endif %}
-                      >
-                      Add location
-                    </label>
+            <div class="field-row" id="create-tag-box" style="display:none;">
+              <input
+                type="text"
+                id="tag-search-create"
+                placeholder="Type a name to tag"
+                autocomplete="off"
+                oninput="showTagSuggestions('tag-search-create', 'tag-suggestions-create', 'selected-tags-create')"
+              >
+              <div id="tag-suggestions-create" class="tag-suggestions"></div>
+              <div id="selected-tags-create" class="selected-tags"></div>
+              <div class="muted">Start typing and click a suggestion.</div>
+            </div>
+
+            <div class="field-row">
+              <label><b>Upload image</b></label>
+              <input type="file" name="image" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,image/*">
+            </div>
+
+            <div class="post-actions">
+              <button type="submit" class="nav-btn">Post</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="card">
+          <h2>Recent Posts</h2>
+
+          {% if posts %}
+            {% for post in posts %}
+              <div class="post-card">
+                <div class="post-user"><b>{{ post.user_name }}</b></div>
+
+                {% if post.location_name %}
+                  <div class="location-line">Location: {{ post.location_name }}</div>
+                {% endif %}
+
+                {% if post.tags %}
+                  <div class="tag-list">
+                    With:
+                    {% for tag in post.tags %}
+                      {{ tag.user_name }}{% if not loop.last %}, {% endif %}
+                    {% endfor %}
                   </div>
+                {% endif %}
 
-                  <div
-                    class="field-row"
-                    id="edit-location-box-{{ post.post_id }}"
-                    style="display:{% if post.location_name %}block{% else %}none{% endif %};"
-                  >
-                    <input type="text" name="location_name" value="{{ post.location_name }}" placeholder="Type a location name">
-                  </div>
+                <div class="post-content">{{ post.content }}</div>
 
-                  <div class="field-row">
-                    <label>
-                      <input
-                        type="checkbox"
-                        name="enable_tags"
-                        onchange="toggleTagBox('edit-tag-box-{{ post.post_id }}', this.checked)"
-                        {% if post.tags %}checked{% endif %}
-                      >
-                      Tag users
-                    </label>
-                  </div>
+                {% if post.image_url %}
+                  <img src="{{ post.image_url }}" alt="Post image" class="post-image">
+                {% endif %}
 
-                  <div
-                    class="field-row"
-                    id="edit-tag-box-{{ post.post_id }}"
-                    style="display:{% if post.tags %}block{% else %}none{% endif %};"
-                  >
-                    <input
-                      type="text"
-                      id="tag-search-edit-{{ post.post_id }}"
-                      placeholder="Type a name to tag"
-                      autocomplete="off"
-                      oninput="showTagSuggestions('tag-search-edit-{{ post.post_id }}', 'tag-suggestions-edit-{{ post.post_id }}', 'selected-tags-edit-{{ post.post_id }}')"
-                    >
-                    <div id="tag-suggestions-edit-{{ post.post_id }}" class="tag-suggestions"></div>
-                    <div id="selected-tags-edit-{{ post.post_id }}" class="selected-tags"></div>
-                    <div class="muted">Start typing and click a suggestion.</div>
-                  </div>
-
-                  <div class="field-row">
-                    <label><b>Replace image</b></label>
-                    <input type="file" name="image" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,image/*">
-                  </div>
-
-                  <div class="post-actions">
-                    <button type="submit" class="nav-btn">Save Edit</button>
-                  </div>
-                </form>
-              </div>
-
-              <script>
-                preloadTags("selected-tags-edit-{{ post.post_id }}", {{ post.tags|tojson }});
-              </script>
-            {% endif %}
-
-            <div class="comment-section">
-              <h4>Comments</h4>
-
-              {% if post.comments %}
-                {% for comment in post.comments %}
-                  <div class="comment-item">
-                    <div class="comment-user"><b>{{ comment.user_name }}</b></div>
-                    <div class="post-content">{{ comment.comment_text }}</div>
-                    <div class="muted">{{ comment.created_at }}</div>
-                  </div>
-                {% endfor %}
-              {% else %}
-                <p class="muted">No comments yet.</p>
-              {% endif %}
-
-              <form method="post" class="comment-form" action="{{ url_for('social.add_comment', post_id=post.post_id) }}">
-                <textarea name="comment_text" placeholder="Write a comment..."></textarea>
-                <div class="post-actions">
-                  <button type="submit" class="nav-btn">Comment</button>
+                <div class="muted">
+                  Created: {{ post.created_at }} |
+                  Updated: {{ post.updated_at }}
                 </div>
-              </form>
+
+                <div class="post-actions">
+                  {% if post.liked_by_current_user %}
+                    <form method="post" action="{{ url_for('social.unlike_post', post_id=post.post_id) }}">
+                      <button type="submit" class="nav-btn">Unlike</button>
+                    </form>
+                  {% else %}
+                    <form method="post" action="{{ url_for('social.like_post', post_id=post.post_id) }}">
+                      <button type="submit" class="nav-btn">Like</button>
+                    </form>
+                  {% endif %}
+
+                  {% if post.user_id == current_user_id %}
+                    <button type="button" class="nav-btn" onclick="toggleEdit({{ post.post_id }})">Edit</button>
+                  {% endif %}
+                </div>
+
+                {% if post.likes %}
+                  <div class="likes-line">
+                    Liked by:
+                    {% for like in post.likes %}
+                      {{ like.user_name }}{% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <div class="likes-line">Liked by: nobody yet</div>
+                {% endif %}
+
+                {% if post.user_id == current_user_id %}
+                  <div class="edit-box" id="edit-box-{{ post.post_id }}">
+                    <form method="post" action="{{ url_for('social.edit_post', post_id=post.post_id) }}" enctype="multipart/form-data">
+                      <textarea name="content">{{ post.content }}</textarea>
+
+                      <div class="field-row">
+                        <label>
+                          <input
+                            type="checkbox"
+                            name="add_location"
+                            onchange="toggleLocationInput('edit-location-box-{{ post.post_id }}', this.checked)"
+                            {% if post.location_name %}checked{% endif %}
+                          >
+                          Add location
+                        </label>
+                      </div>
+
+                      <div
+                        class="field-row"
+                        id="edit-location-box-{{ post.post_id }}"
+                        style="display:{% if post.location_name %}block{% else %}none{% endif %};"
+                      >
+                        <input type="text" name="location_name" value="{{ post.location_name }}" placeholder="Type a location name">
+                      </div>
+
+                      <div class="field-row">
+                        <label>
+                          <input
+                            type="checkbox"
+                            name="enable_tags"
+                            onchange="toggleTagBox('edit-tag-box-{{ post.post_id }}', this.checked)"
+                            {% if post.tags %}checked{% endif %}
+                          >
+                          Tag users
+                        </label>
+                      </div>
+
+                      <div
+                        class="field-row"
+                        id="edit-tag-box-{{ post.post_id }}"
+                        style="display:{% if post.tags %}block{% else %}none{% endif %};"
+                      >
+                        <input
+                          type="text"
+                          id="tag-search-edit-{{ post.post_id }}"
+                          placeholder="Type a name to tag"
+                          autocomplete="off"
+                          oninput="showTagSuggestions('tag-search-edit-{{ post.post_id }}', 'tag-suggestions-edit-{{ post.post_id }}', 'selected-tags-edit-{{ post.post_id }}')"
+                        >
+                        <div id="tag-suggestions-edit-{{ post.post_id }}" class="tag-suggestions"></div>
+                        <div id="selected-tags-edit-{{ post.post_id }}" class="selected-tags"></div>
+                        <div class="muted">Start typing and click a suggestion.</div>
+                      </div>
+
+                      <div class="field-row">
+                        <label><b>Replace image</b></label>
+                        <input type="file" name="image" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,image/*">
+                      </div>
+
+                      <div class="post-actions">
+                        <button type="submit" class="nav-btn">Save Edit</button>
+                      </div>
+                    </form>
+                  </div>
+
+                  <script>
+                    preloadTags("selected-tags-edit-{{ post.post_id }}", {{ post.tags|tojson }});
+                  </script>
+                {% endif %}
+
+                <div class="comment-section">
+                  <h4>Comments</h4>
+
+                  {% if post.comments %}
+                    {% for comment in post.comments %}
+                      <div class="comment-item">
+                        <div class="comment-user"><b>{{ comment.user_name }}</b></div>
+                        <div class="post-content">{{ comment.comment_text }}</div>
+                        <div class="muted">{{ comment.created_at }}</div>
+
+                        {% if comment.user_id == current_user_id %}
+                          <div class="post-actions">
+                            <button
+                              type="button"
+                              class="nav-btn"
+                              onclick="toggleCommentEdit({{ comment.comment_id }})"
+                            >
+                              Edit Comment
+                            </button>
+                          </div>
+
+                          <div class="comment-edit-box" id="edit-comment-box-{{ comment.comment_id }}">
+                            <form method="post" action="{{ url_for('social.edit_comment', comment_id=comment.comment_id) }}">
+                              <textarea name="comment_text">{{ comment.comment_text }}</textarea>
+                              <div class="post-actions">
+                                <button type="submit" class="nav-btn">Save Comment</button>
+                              </div>
+                            </form>
+                          </div>
+                        {% endif %}
+                      </div>
+                    {% endfor %}
+                  {% else %}
+                    <p class="muted">No comments yet.</p>
+                  {% endif %}
+
+                  <form method="post" class="comment-form" action="{{ url_for('social.add_comment', post_id=post.post_id) }}">
+                    <textarea name="comment_text" placeholder="Write a comment..."></textarea>
+                    <div class="post-actions">
+                      <button type="submit" class="nav-btn">Comment</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            {% endfor %}
+          {% else %}
+            <p class="muted">No posts yet.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="sidebar-column">
+        <div class="sidebar-card">
+          <h3 class="sidebar-title">Following</h3>
+          {% if following_users %}
+            <div class="follow-list">
+              {% for user in following_users %}
+                <div class="follow-item">
+                  <div class="follow-name">{{ user.user_name }}</div>
+                  <form class="follow-form" method="post" action="{{ url_for('social.unfollow_user', followed_user_id=user.user_id) }}">
+                    <button type="submit" class="nav-btn">Unfollow</button>
+                  </form>
+                </div>
+              {% endfor %}
             </div>
-          </div>
-        {% endfor %}
-      {% else %}
-        <p class="muted">No posts yet.</p>
-      {% endif %}
+          {% else %}
+            <p class="muted">You are not following anyone yet.</p>
+          {% endif %}
+        </div>
+
+        <div class="sidebar-card">
+          <h3 class="sidebar-title">Suggested Users</h3>
+          {% if suggested_users %}
+            <div class="follow-list">
+              {% for user in suggested_users %}
+                <div class="follow-item">
+                  <div class="follow-name">{{ user.user_name }}</div>
+                  <form class="follow-form" method="post" action="{{ url_for('social.follow_user', followed_user_id=user.user_id) }}">
+                    <button type="submit" class="nav-btn">Follow</button>
+                  </form>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="muted">No suggested users right now.</p>
+          {% endif %}
+        </div>
+      </div>
     </div>
   </div>
 </body>

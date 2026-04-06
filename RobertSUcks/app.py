@@ -4,6 +4,11 @@ from home import home_bp
 from food_ml import food_bp
 from social_media import social_bp
 
+import threading
+import time
+import subprocess
+import os
+
 app = Flask(__name__)
 app.secret_key = "dev"
 
@@ -17,5 +22,27 @@ def index():
     return redirect(url_for("auth.login"))
 
 
+def open_browser():
+    time.sleep(2)  # wait for server to start
+
+    url = "http://127.0.0.1:5000"
+
+    edge_paths = [
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+    ]
+
+    for edge in edge_paths:
+        if os.path.exists(edge):
+            # 🔥 TRUE fullscreen (kiosk mode)
+            subprocess.Popen([edge, "--start-fullscreen", url])
+            return
+
+    # fallback
+    import webbrowser
+    webbrowser.open(url)
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    threading.Thread(target=open_browser, daemon=True).start()
+    app.run(host="0.0.0.0", port=5000, debug=False)
