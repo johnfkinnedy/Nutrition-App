@@ -7,7 +7,9 @@ def createDatabaseFromFile():
     "host": "nurilog-db.mysql.database.azure.com",
     "port": 3306,
     "user": "tylercoleroot",
-    "password": "Barker123!"  
+    "password": "Barker123!",
+    "ssl_ca": "DigiCertGlobalRootG2.crt.pem",
+    "ssl_disabled": False,
     }
   
   conn = mysql.connector.connect(**DB_CONFIG)
