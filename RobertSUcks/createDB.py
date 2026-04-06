@@ -12,7 +12,7 @@ def createDatabaseFromFile():
     conn = mysql.connector.connect(**DB_CONFIG)
     cursor = conn.cursor(buffered=True)
 
-    with open("RobertSUcks/NutrilogDB.sql", "r", encoding="utf-8") as file:
+    with open("NutrilogDB.sql", "r", encoding="utf-8") as file:
         sql_queries = file.read()
 
     queries = sql_queries.split(";")

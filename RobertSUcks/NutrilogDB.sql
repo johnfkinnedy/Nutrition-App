@@ -8,6 +8,7 @@ DROP TABLE IF EXISTS Social_Posts;
 DROP TABLE IF EXISTS Meal_Log;
 DROP TABLE IF EXISTS Workouts;
 DROP TABLE IF EXISTS Users;
+DROP TABLE IF EXISTS Social_Follows;
 SET FOREIGN_KEY_CHECKS = 1;
 
 CREATE TABLE Users (
@@ -91,8 +92,43 @@ CREATE TABLE Social_Post_Tags (
         ON DELETE CASCADE
 );
 
+CREATE TABLE Social_Follows (
+    follower_user_id  INT NOT NULL,
+    followed_user_id  INT NOT NULL,
+    created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (follower_user_id, followed_user_id),
+    CONSTRAINT fk_follows_follower
+        FOREIGN KEY (follower_user_id)
+        REFERENCES Users(user_id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_follows_followed
+        FOREIGN KEY (followed_user_id)
+        REFERENCES Users(user_id)
+        ON DELETE CASCADE,
+    CONSTRAINT chk_no_self_follow
+        CHECK (follower_user_id <> followed_user_id)
+);
+
+CREATE TABLE Social_Post_Likes (
+    post_id     INT NOT NULL,
+    user_id     INT NOT NULL,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (post_id, user_id),
+    CONSTRAINT fk_likes_post
+        FOREIGN KEY (post_id)
+        REFERENCES Social_Posts(post_id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_likes_user
+        FOREIGN KEY (user_id)
+        REFERENCES Users(user_id)
+        ON DELETE CASCADE
+);
+
 INSERT INTO Users (user_id, pass_key, first_name, last_name)
 VALUES (2222, '2222', 'Grace', 'Jonas');
+
+INSERT INTO Users (user_id, pass_key, first_name, last_name)
+VALUES (3333, '3333', 'Tyler', 'Cole');
 
 SELECT DATABASE();
 SHOW COLUMNS FROM Social_Posts;
