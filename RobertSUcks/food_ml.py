@@ -362,14 +362,12 @@ def _save_upload_to_static(file_storage) -> str:
 # Helper to build navigation buttons HTML. Your template references maps_url, food_url, clock_url, and logout_url which are generated here.
 def _build_nav_buttons() -> str:
     logout_url = url_for("auth.logout")
-    maps_url = url_for("maps.index")
     home_url = url_for("home.home")
-    clock_url = url_for("clock.index")
+    social_url = url_for("social.index")
 
     nav_buttons = f"""
         <li><a href="{home_url}">Home</a></li>
-        <li><a href="{maps_url}">Maps</a></li>
-        <li><a href="{clock_url}">Clock In/Out</a></li>
+        <li><a href="{social_url}">Social Media</a></li>
 
         <li>
             <form method="post" action="{logout_url}" style="display:inline;">
@@ -639,24 +637,23 @@ def index():
     saved_meals_grouped = _group_saved_meals_by_day(saved_meals)
 
     # Nav URLs (your template references these)
-    maps_url = url_for("maps.index")
     food_url = url_for("food.index")
-    clock_url = url_for("clock.index")
+    social_url = url_for("social.index")
 
     return render_template_string(
-        PAGE_HTML,
-        meal=meal,
-        search_query=search_query,
-        class_names=class_names[:5000],
-        current_image_url=current_image_url,
-        current_preds=current_preds,
-        history=history,
-        saved_meals=saved_meals,
-        saved_meals_grouped=saved_meals_grouped,  # <-- pass grouped
-        fmt_num=_fmt_num,
-        maps_url=maps_url,
-        food_url=food_url,
-        clock_url=clock_url,
+      PAGE_HTML,
+      meal=meal,
+      search_query=search_query,
+      class_names=class_names[:5000],
+      current_image_url=current_image_url,
+      current_preds=current_preds,
+      history=history,
+      saved_meals=saved_meals,
+      saved_meals_grouped=saved_meals_grouped,  # <-- pass grouped
+      fmt_num=_fmt_num,
+      food_url=food_url,
+      social_url=social_url,
+      home_url=url_for("home.home"),
     )
 
 # Route to handle image upload and prediction. Validates login, checks for uploaded file, saves it, runs prediction, stores results in session, and redirects back to index. Also supports AJAX requests by returning JSON responses with appropriate status codes.
@@ -982,20 +979,13 @@ PAGE_HTML = r"""
 
     <ul class="menu">
         <li>
-            <form action="{{ maps_url }}" method="get">
-                <button type="submit" class="nav-btn">Maps</button>
+            <form action="{{ home_url }}" method="get">
+                <button type="submit" class="nav-btn">Home</button>
             </form>
         </li>
-
         <li>
-            <form action="{{ food_url }}" method="get">
-                <button type="submit" class="nav-btn">Add Food</button>
-            </form>
-        </li>
-
-        <li>
-            <form action="{{ clock_url }}" method="get">
-                <button type="submit" class="nav-btn">Clock In/Out</button>
+            <form action="{{ social_url }}" method="get">
+                <button type="submit" class="nav-btn">Social Media</button>
             </form>
         </li>
 

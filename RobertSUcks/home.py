@@ -132,9 +132,8 @@ def home():
 
     # Nav URLs
     logout_url = url_for("auth.logout")
-    maps_url = url_for("maps.index")
     food_url = url_for("food.index")
-    clock_url = url_for("clock.index")
+    social_url = url_for("social.index")
 
     # Calendar month selection
     now = datetime.now()
@@ -167,9 +166,7 @@ def home():
         first_name=first_name,
         last_name=last_name,
         logout_url=logout_url,
-        maps_url=maps_url,
         food_url=food_url,
-        clock_url=clock_url,
         year=year,
         month=month,
         month_name=month_name,
@@ -180,6 +177,7 @@ def home():
         next_y=next_y,
         next_m=next_m,
         today_key=today_key,
+        social_url=social_url,
     )
 
 
@@ -347,20 +345,13 @@ PAGE_HTML = r"""
 
     <ul class="menu">
       <li>
-        <form action="{{ maps_url }}" method="get">
-          <button type="submit" class="nav-btn">Maps</button>
-        </form>
-      </li>
-
-      <li>
         <form action="{{ food_url }}" method="get">
           <button type="submit" class="nav-btn">Add Food</button>
         </form>
       </li>
-
       <li>
-        <form action="{{ clock_url }}" method="get">
-          <button type="submit" class="nav-btn">Clock In/Out</button>
+        <form action="{{ social_url }}" method="get">
+          <button type="submit" class="nav-btn">Social Media</button>
         </form>
       </li>
 
