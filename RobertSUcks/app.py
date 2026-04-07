@@ -9,7 +9,7 @@ import time
 import subprocess
 import os
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates')
 app.secret_key = "dev"
 
 app.register_blueprint(auth_bp)

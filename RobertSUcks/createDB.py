@@ -38,6 +38,17 @@ def createDatabaseFromFile():
     )
     conn.commit()
     fix_old_user.close()
+    
+    tyler_old_pass = "3333"
+    tyler_secure_pass = encrypt_password(tyler_old_pass)
+
+    fix_old_tyler = conn.cursor()
+    fix_old_tyler.execute(
+        "UPDATE Users SET pass_key = %s WHERE pass_key = %s",
+        (tyler_secure_pass, tyler_old_pass)
+    )
+    conn.commit()
+    fix_old_tyler.close()
     conn.close()
 
 createDatabaseFromFile()
