@@ -21,6 +21,8 @@ DB_CONFIG = {
     "user": "tylercoleroot",
     "password": "Barker123!",
     "database": "NutriLog",
+    "ssl_ca": "DigiCertGlobalRootG2.crt.pem",
+    "ssl_disabled": False,
 }
 
 # helper to get a new DB connection (remember to close it!)

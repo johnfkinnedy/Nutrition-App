@@ -19,6 +19,8 @@ DB_CONFIG = {
     "user": "tylercoleroot",
     "password": "Barker123!",
     "database": "NutriLog",
+    "ssl_ca": "DigiCertGlobalRootG2.crt.pem",
+    "ssl_disabled": False,
 }
 
 auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
