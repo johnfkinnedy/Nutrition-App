@@ -1,5 +1,5 @@
 import mysql.connector
-from security import encrypt_password, decrypt_password
+from RobertSUcks import security as security
 
 def createDatabaseFromFile():
   # Establish a connection to the MySQL server
