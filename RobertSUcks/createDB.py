@@ -1,5 +1,5 @@
 import mysql.connector
-from .security import encrypt_password
+from RobertSUcks import security as security
 
 def createDatabaseFromFile():
   # Establish a connection to the MySQL server
@@ -30,7 +30,7 @@ def createDatabaseFromFile():
     cursor.close()
 
     old_pass = "2222"
-    secure_pass = encrypt_password(old_pass)
+    secure_pass = security.encrypt_password(old_pass)
 
     fix_old_user = conn.cursor()
     fix_old_user.execute(
@@ -41,7 +41,7 @@ def createDatabaseFromFile():
     fix_old_user.close()
     
     tyler_old_pass = "3333"
-    tyler_secure_pass = encrypt_password(tyler_old_pass)
+    tyler_secure_pass = security.encrypt_password(tyler_old_pass)
 
     fix_old_tyler = conn.cursor()
     fix_old_tyler.execute(
